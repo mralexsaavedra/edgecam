@@ -118,15 +118,53 @@ class EdgeCamField extends WatchUi.DataField {
 
         dc.setColor(Graphics.COLOR_WHITE, background);
         dc.clear();
-        var titleFont = h >= 90 ? Graphics.FONT_LARGE : Graphics.FONT_MEDIUM;
-        var detailFont = Graphics.FONT_XTINY;
+        // Largest font that fits: number fonts for digits (timer, pairing code), text fonts otherwise
+        var numeric = isNumeric(title);
+        var titleFonts = numeric
+            ? [Graphics.FONT_NUMBER_THAI_HOT, Graphics.FONT_NUMBER_HOT, Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD, Graphics.FONT_LARGE, Graphics.FONT_MEDIUM, Graphics.FONT_SMALL]
+            : [Graphics.FONT_LARGE, Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY];
+        var detailFonts = [Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY, Graphics.FONT_XTINY];
+        var margin = 6;
+        var maxW = w - 2 * margin;
+        // The detail line gets up to a third of the height; the title takes the rest
+        var detailFont = fit(dc, detail, detailFonts, maxW, h / 3);
+        var detailH = detailFont != null ? dc.getFontHeight(detailFont) : 0;
+        var titleFont = fit(dc, title, titleFonts, maxW, h - detailH - margin);
+        if (titleFont == null) {
+            titleFont = titleFonts[titleFonts.size() - 1];
+        }
         var titleH = dc.getFontHeight(titleFont);
-        var detailH = dc.getFontHeight(detailFont);
-        var showDetail = h >= titleH + detailH + 4;
-        var top = showDetail ? (h - titleH - detailH) / 2 : (h - titleH) / 2;
+        if (titleH + detailH > h) {
+            detailFont = null;
+            detailH = 0;
+        }
+        var top = (h - titleH - detailH) / 2;
         dc.drawText(w / 2, top, titleFont, title, Graphics.TEXT_JUSTIFY_CENTER);
-        if (showDetail) {
+        if (detailFont != null) {
             dc.drawText(w / 2, top + titleH, detailFont, detail, Graphics.TEXT_JUSTIFY_CENTER);
         }
+    }
+
+    // First font in the list whose rendering of text fits in maxW x maxH, or null
+    hidden function fit(dc, text, fonts, maxW, maxH) {
+        for (var i = 0; i < fonts.size(); i++) {
+            var size = dc.getTextDimensions(text, fonts[i]);
+            if (size[0] <= maxW && size[1] <= maxH) {
+                return fonts[i];
+            }
+        }
+        return null;
+    }
+
+    // Digits and ':' only, which the number fonts can draw
+    hidden function isNumeric(text) {
+        var chars = text.toCharArray();
+        for (var i = 0; i < chars.size(); i++) {
+            var c = chars[i];
+            if (!((c >= '0' && c <= '9') || c == ':')) {
+                return false;
+            }
+        }
+        return chars.size() > 0;
     }
 }
