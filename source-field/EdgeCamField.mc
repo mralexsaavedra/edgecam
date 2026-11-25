@@ -51,6 +51,9 @@ class EdgeCamField extends WatchUi.DataField {
     hidden var _wasRecording = false;
     hidden var _background = 0;
     hidden var _fieldH = 0;
+    // Timer paused (auto-pause or Start button) since this moment, null while it runs
+    hidden var _pausedSince = null;
+    hidden var _autoStopped = false;
     // Big text font built by tools/mkfont.py (Barlow Condensed Bold, only the letters below): the
     // system text fonts stop at FONT_LARGE, which left REC smaller than the numbers
     const BIG_GLYPHS = "RECSTOPBUSYAMI.";
@@ -84,6 +87,10 @@ class EdgeCamField extends WatchUi.DataField {
             System.println("Memory used " + stats.usedMemory + " of " + stats.totalMemory);
         }
         _link.tick();
+        if (!_autoStopped && AutoStop.due(_pausedSince, System.getTimer(), autoStopMinutes(), _link.recording)) {
+            _autoStopped = true;
+            _link.stopRecording("paused " + autoStopMinutes() + " min");
+        }
         var recording = _link.recording;
         if (recording && !_wasRecording) {
             _clips++;
@@ -97,6 +104,43 @@ class EdgeCamField extends WatchUi.DataField {
 
     function onTimerLap() {
         _link.toggleRecord();
+    }
+
+    function onTimerPause() {
+        startPause();
+    }
+
+    function onTimerStop() {
+        startPause();
+    }
+
+    function onTimerResume() {
+        _pausedSince = null;
+        _autoStopped = false;
+    }
+
+    function onTimerStart() {
+        _pausedSince = null;
+        _autoStopped = false;
+    }
+
+    // Activity saved or discarded: never leave the camera recording
+    function onTimerReset() {
+        _pausedSince = null;
+        _link.stopRecording("activity ended");
+    }
+
+    hidden function startPause() {
+        if (_pausedSince == null) {
+            _pausedSince = System.getTimer();
+            _autoStopped = false;
+        }
+    }
+
+    // Set in the Garmin Connect app (field settings); 2 minutes if missing
+    hidden function autoStopMinutes() {
+        var m = Application.Properties.getValue("autoStopMinutes");
+        return m instanceof Number ? m : 2;
     }
 
     function onUpdate(dc) {

@@ -1,0 +1,4 @@
+<properties>
+    <!-- Minutes paused before the field stops the camera on its own; 0 = never -->
+    <property id="autoStopMinutes" type="number">2</property>
+</properties>

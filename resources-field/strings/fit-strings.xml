@@ -6,4 +6,11 @@
     <string id="ClipLabel">Clip</string>
     <string id="ClipUnit">clip</string>
     <string id="ClipsLabel">Camera clips</string>
+    <string id="AutoStopTitle">Stop the camera after a pause of</string>
+    <string id="AutoStopPrompt">The camera stops on its own when the activity has been paused this long. It also stops when the activity is saved or discarded.</string>
+    <string id="AutoStopNever">Never</string>
+    <string id="AutoStop1">1 minute</string>
+    <string id="AutoStop2">2 minutes</string>
+    <string id="AutoStop5">5 minutes</string>
+    <string id="AutoStop10">10 minutes</string>
 </strings>

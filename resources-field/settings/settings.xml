@@ -1,0 +1,11 @@
+<settings>
+    <setting propertyKey="@Properties.autoStopMinutes" title="@Strings.AutoStopTitle" prompt="@Strings.AutoStopPrompt">
+        <settingConfig type="list">
+            <listEntry value="0">@Strings.AutoStopNever</listEntry>
+            <listEntry value="1">@Strings.AutoStop1</listEntry>
+            <listEntry value="2">@Strings.AutoStop2</listEntry>
+            <listEntry value="5">@Strings.AutoStop5</listEntry>
+            <listEntry value="10">@Strings.AutoStop10</listEntry>
+        </settingConfig>
+    </setting>
+</settings>

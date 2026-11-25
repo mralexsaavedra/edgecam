@@ -152,6 +152,18 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
         send(Duml.record(nextSeq(), _requestedStart));
     }
 
+    // Stops the camera if it records and nothing is in flight; reason goes to the log
+    function stopRecording(reason) {
+        if (!connected || !recording || pending != null) {
+            return;
+        }
+        log("Auto stop: " + reason);
+        _requestedStart = false;
+        pending = :stop;
+        _pendingSince = System.getTimer();
+        send(Duml.record(nextSeq(), false));
+    }
+
     // Keep-alive, watchdog for a write whose callback never arrives, and rescan after a lost link.
     // Call it at least once per second.
     function tick() {

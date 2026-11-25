@@ -11,6 +11,11 @@ Two builds share the camera code in `source/`:
 - `app.jungle`: a **diagnostic app** (`source-app/`) with the state and a log on screen; ENTER toggles
   recording. It also carries the R SDK code for the Osmo Action line (`source-rsdk/`).
 
+Pauses: the field keeps the camera as it was at traffic lights, but if the activity stays paused (auto-pause or the
+Start button) longer than a set time it stops the camera, and it always stops it when the activity is saved or
+discarded. The time is a field setting in the Garmin Connect app: never, 1, 2 (default), 5 or 10 minutes. While
+paused, Lap does not reach the field, so recording is started again with Lap once moving.
+
 The data field also writes to the activity's FIT file, so each clip can be placed on the route: per second
 `camera_recording` (0/1) and `camera_clip` (clip number, 0 when not recording), and `camera_clips` (total) in the
 session summary. Garmin Connect shows them as charts. Start and stop also mark laps.
