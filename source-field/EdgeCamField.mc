@@ -30,11 +30,14 @@ class EdgeCamFieldApp extends Application.AppBase {
 }
 
 class EdgeCamField extends WatchUi.DataField {
-    // Colours: navy ready, red recording, amber needs attention, grey not available
-    const NAVY = 0x14244A;
-    const RED = 0xC62828;
-    const AMBER = 0xE0A000;
-    const GREY = 0x555555;
+    // Colours from BiciCAM: the background says the state at a glance. Red records, navy is ready,
+    // light grey (the tally light off) has no camera, amber asks for attention. Text is white on navy
+    // and red, navy on light grey and amber (light grey keeps "no camera" apart from red in the sun).
+    const NAVY = 0x1F2555;
+    const RED = 0xD7261E;
+    const GREY = 0xCFD5D9;
+    const AMBER = 0xF59300;
+    const WHITE = 0xFFFFFF;
 
     hidden var _link;
     // Written to the activity's FIT file so each clip can be placed on the route afterwards:
@@ -77,72 +80,160 @@ class EdgeCamField extends WatchUi.DataField {
         _link.toggleRecord();
     }
 
-    // Joins the known parts with " | ", skipping unknown (null) ones
-    hidden function join(parts) {
-        var text = "";
-        for (var i = 0; i < parts.size(); i++) {
-            if (parts[i] != null) {
-                text += (text.length() > 0 ? " | " : "") + parts[i];
-            }
-        }
-        return text;
-    }
-
     function onUpdate(dc) {
         var w = dc.getWidth();
         var h = dc.getHeight();
         var background = GREY;
-        var title = "CAM";
-        var detail = _link.state;
+        var main = "CAM";
+        var sub = _link.state;
+        var showData = false;
+        var dot = false;
 
         if (_link.recording) {
             background = RED;
             var secs = _link.recordingSeconds();
-            title = secs != null ? (secs / 60).format("%02d") + ":" + (secs % 60).format("%02d") : "REC";
-            detail = join(["REC", _link.batteryText()]);
+            main = secs != null ? (secs / 60).format("%02d") + ":" + (secs % 60).format("%02d") : "REC";
+            // Tally dot blinking once a second, as on the camera
+            dot = secs == null || secs % 2 == 0;
+            showData = true;
         } else if (_link.connected) {
             background = NAVY;
-            title = "READY";
-            detail = join([_link.batteryText(), _link.storageText()]);
-            if (detail.length() == 0) {
-                detail = "Lap to record";
-            }
+            main = "REC";
+            showData = true;
         } else if (_link.phase == CameraLink.PAIRING) {
             background = AMBER;
-            title = _link.verifyCode != null ? _link.verifyCode.toString() : "PAIR";
-            detail = "Accept on camera";
+            main = _link.verifyCode != null ? _link.verifyCode.toString() : "PAIR";
+            sub = "Accept on camera";
         } else if (_link.phase == CameraLink.FAILED) {
             background = AMBER;
-            title = "CAM";
+        }
+        var ink = (background == GREY || background == AMBER) ? NAVY : WHITE;
+        dc.setColor(ink, background);
+        dc.clear();
+
+        if (!showData) {
+            // Main word or code on top, what to do underneath
+            drawText(dc, 0, 0, w, h * 2 / 3, main, ink, true);
+            drawText(dc, 0, h * 2 / 3, w, h / 3, sub, ink, false);
+            return;
         }
 
-        dc.setColor(Graphics.COLOR_WHITE, background);
-        dc.clear();
-        // Largest font that fits: number fonts for digits (timer, pairing code), text fonts otherwise
-        var numeric = isNumeric(title);
-        var titleFonts = numeric
-            ? [Graphics.FONT_NUMBER_THAI_HOT, Graphics.FONT_NUMBER_HOT, Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD, Graphics.FONT_LARGE, Graphics.FONT_MEDIUM, Graphics.FONT_SMALL]
-            : [Graphics.FONT_LARGE, Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY];
-        var detailFonts = [Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY, Graphics.FONT_XTINY];
-        var margin = 6;
-        var maxW = w - 2 * margin;
-        // The detail line gets up to a third of the height; the title takes the rest
-        var detailFont = fit(dc, detail, detailFonts, maxW, h / 3);
-        var detailH = detailFont != null ? dc.getFontHeight(detailFont) : 0;
-        var titleFont = fit(dc, title, titleFonts, maxW, h - detailH - margin);
-        if (titleFont == null) {
-            titleFont = titleFonts[titleFonts.size() - 1];
+        var battery = _link.charging() ? "CHG" : (_link.batteryPercent() != null ? "~" + _link.batteryPercent() + "%" : "--%");
+        var storage = _link.storageText() != null ? _link.storageText() : "--";
+        var batteryColor = colorForBattery(_link.charging() ? null : _link.batteryPercent(), background);
+
+        if (w > h * 2) {
+            // Wide slot: REC on the left, battery over storage on the right
+            drawMain(dc, 0, 0, w / 2, h, main, dot, ink);
+            drawWithIcon(dc, w / 2, 0, w / 2, h / 2, battery, batteryColor, :battery, _link.batteryPercent());
+            drawWithIcon(dc, w / 2, h / 2, w / 2, h / 2, storage, ink, :card, null);
+        } else if (h > w * 3 / 4) {
+            // Tall slot: three rows
+            drawMain(dc, 0, 0, w, h / 2, main, dot, ink);
+            drawWithIcon(dc, 0, h / 2, w, h / 4, battery, batteryColor, :battery, _link.batteryPercent());
+            drawWithIcon(dc, 0, h * 3 / 4, w, h / 4, storage, ink, :card, null);
+        } else {
+            // Normal slot: REC on the left, battery over storage on the right, like BiciCAM
+            drawMain(dc, 0, 0, w * 3 / 5, h, main, dot, ink);
+            drawWithIcon(dc, w * 3 / 5, 0, w * 2 / 5, h / 2, battery, batteryColor, :battery, _link.batteryPercent());
+            drawWithIcon(dc, w * 3 / 5, h / 2, w * 2 / 5, h / 2, storage, ink, :card, null);
         }
-        var titleH = dc.getFontHeight(titleFont);
-        if (titleH + detailH > h) {
-            detailFont = null;
-            detailH = 0;
+    }
+
+    // The big value (REC or the counter) with the tally dot above it
+    hidden function drawMain(dc, x, y, w, h, text, dot, ink) {
+        var dotR = h / 14;
+        if (dotR < 3) {
+            dotR = 3;
         }
-        var top = (h - titleH - detailH) / 2;
-        dc.drawText(w / 2, top, titleFont, title, Graphics.TEXT_JUSTIFY_CENTER);
-        if (detailFont != null) {
-            dc.drawText(w / 2, top + titleH, detailFont, detail, Graphics.TEXT_JUSTIFY_CENTER);
+        var dotSpace = dotR * 2 + 4;
+        var font = fit(dc, text, fontsFor(text), w - 8, h - dotSpace);
+        if (font == null) {
+            font = Graphics.FONT_XTINY;
         }
+        var th = dc.getFontHeight(font);
+        var top = y + (h - th - dotSpace) / 2;
+        // Filled dot: recording (blinking); ring: ready
+        dc.setColor(ink, Graphics.COLOR_TRANSPARENT);
+        if (dot) {
+            dc.fillCircle(x + w / 2, top + dotR, dotR);
+        } else {
+            dc.setPenWidth(2);
+            dc.drawCircle(x + w / 2, top + dotR, dotR);
+            dc.setPenWidth(1);
+        }
+        dc.drawText(x + w / 2, top + dotSpace, font, text, Graphics.TEXT_JUSTIFY_CENTER);
+    }
+
+    // A value with a small battery or card drawing in front, centred in its box
+    hidden function drawWithIcon(dc, x, y, w, h, text, color, icon, level) {
+        var iconH = h * 3 / 5;
+        var iconW = icon == :battery ? iconH * 2 : iconH * 3 / 4;
+        var gap = iconH / 3;
+        var font = fit(dc, text, fontsFor(text), w - iconW - gap - 8, h - 2);
+        if (font == null) {
+            font = Graphics.FONT_XTINY;
+        }
+        var tw = dc.getTextWidthInPixels(text, font);
+        var left = x + (w - iconW - gap - tw) / 2;
+        var iy = y + (h - iconH) / 2;
+        dc.setColor(color, Graphics.COLOR_TRANSPARENT);
+        dc.setPenWidth(2);
+        if (icon == :battery) {
+            var bodyW = iconW - iconH / 5;
+            dc.drawRectangle(left, iy, bodyW, iconH);
+            dc.fillRectangle(left + bodyW, iy + iconH / 3, iconH / 5, iconH / 3);
+            if (level != null) {
+                var fillW = (bodyW - 6) * (level > 100 ? 100 : level) / 100;
+                dc.fillRectangle(left + 3, iy + 3, fillW, iconH - 6);
+            }
+        } else {
+            // SD card: rectangle with a clipped corner
+            var c = iconW / 3;
+            dc.drawLine(left + c, iy, left + iconW, iy);
+            dc.drawLine(left + iconW, iy, left + iconW, iy + iconH);
+            dc.drawLine(left + iconW, iy + iconH, left, iy + iconH);
+            dc.drawLine(left, iy + iconH, left, iy + c);
+            dc.drawLine(left, iy + c, left + c, iy);
+        }
+        dc.setPenWidth(1);
+        dc.drawText(left + iconW + gap, y + (h - dc.getFontHeight(font)) / 2, font, text, Graphics.TEXT_JUSTIFY_LEFT);
+    }
+
+    hidden function drawText(dc, x, y, w, h, text, color, big) {
+        var fonts = big ? fontsFor(text) : [Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY, Graphics.FONT_XTINY];
+        var font = fit(dc, text, fonts, w - 8, h);
+        if (font == null) {
+            font = Graphics.FONT_XTINY;
+        }
+        dc.setColor(color, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(x + w / 2, y + (h - dc.getFontHeight(font)) / 2, font, text, Graphics.TEXT_JUSTIFY_CENTER);
+    }
+
+    // Battery colour as in BiciCAM: green from 30 %, yellow 15-29 %, red below; on the red background
+    // light tones and no red, so the percentage stays readable while recording. Unknown or charging: ink.
+    hidden function colorForBattery(percent, background) {
+        var ink = (background == GREY || background == AMBER) ? NAVY : WHITE;
+        if (percent == null) {
+            return ink;
+        }
+        if (background == RED) {
+            return percent >= 30 ? 0xC8F7C5 : 0xFFF59D;
+        }
+        if (percent >= 30) {
+            return background == NAVY ? 0x5BD46A : 0x1B7A2E;
+        }
+        if (percent >= 15) {
+            return background == NAVY ? 0xFFD54F : 0x8A6D00;
+        }
+        return background == NAVY ? 0xFF6B6B : 0xB00020;
+    }
+
+    // Number fonts for digits (timer, code, percentages), text fonts otherwise
+    hidden function fontsFor(text) {
+        return isNumeric(text)
+            ? [Graphics.FONT_NUMBER_THAI_HOT, Graphics.FONT_NUMBER_HOT, Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD, Graphics.FONT_LARGE, Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY]
+            : [Graphics.FONT_LARGE, Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY, Graphics.FONT_XTINY];
     }
 
     // First font in the list whose rendering of text fits in maxW x maxH, or null

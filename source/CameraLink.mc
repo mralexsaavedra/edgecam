@@ -357,6 +357,15 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
         return recordingSince == null ? null : (System.getTimer() - recordingSince) / 1000;
     }
 
+    // Estimated battery percentage, or null when unknown
+    function batteryPercent() {
+        return batteryMv == null ? null : Duml.batteryPercent(batteryMv);
+    }
+
+    function charging() {
+        return batteryMa != null && batteryMa > 0;
+    }
+
     // "~74%", "CHG" while charging, or null when unknown
     function batteryText() {
         if (batteryMv == null) {
