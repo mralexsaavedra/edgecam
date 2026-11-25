@@ -31,6 +31,15 @@ The session in `source/CameraLink.mc` mirrors a Bluetooth capture of a working i
 On the Edge 540 the Nano is matched by its advertised name (`OsmoNano-...`): Connect IQ does not expose
 its manufacturer data or service uuid in the scan result.
 
+Other findings from the captures:
+
+- **Camera battery**: byte 20 of the payload of the `0d/02` message the camera pushes from address `0x05`
+  (read 74 while the camera showed 74 %). The Edge cannot read it: Connect IQ only delivers the first 20 bytes
+  of each notification (11-byte header + 9 payload bytes). It would need a query with a short reply.
+- **DJI Mimo** only uses Bluetooth to switch on the camera's Wi-Fi (`07/48`) and read its network name and
+  password (`07/07`, `07/0e`); recording, battery and the rest go over Wi-Fi, which Connect IQ cannot use.
+- No GPS or highlight-marker commands have been seen over Bluetooth yet.
+
 The R SDK code for the Osmo Action line (`source/DjiProtocol.mc`) is kept for later.
 
 ## Build
