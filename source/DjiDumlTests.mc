@@ -78,3 +78,21 @@ function dumlReadsWholeReplyAndRejectsBadHeader(logger) {
     return reply.size() == 1 && reply[0].isResponse() && reply[0].isCommand(0x07, 0x45)
         && reply[0].payload.size() == 2 && reply[0].payload[1] == 0x02 && junk.size() == 0;
 }
+
+// Reply to 02/71 captured from the Mac (46.4 GB free), cut to 20 bytes as the Edge receives it
+(:test)
+function dumlReadsFreeSpaceFromTruncatedReply(logger) {
+    var payload = Duml.fromHex("000101C00000ACB90000000000002A0D0000");
+    var frame = Duml.encode(0x01, 0x02, 0x3002, Duml.RESPONSE, 0x02, 0x71, payload).slice(0, 20);
+    var frames = Duml.parseNotification(frame);
+    return frames.size() == 1 && frames[0].isCommand(0x02, 0x71) && Duml.freeMegabytes(frames[0].payload) == 47532;
+}
+
+// Battery push (0d/02 from 0x05) from the DJI Mimo capture: 4102 mV, -213 mA, camera at 74 %.
+// A reply to an explicit 0d/02 query carries an extra result byte first, so the push is what we read.
+(:test)
+function dumlReadsBatteryVoltageAndCurrent(logger) {
+    var payload = Duml.fromHex("00061000002BFFFFFF00000000000000006801004A00000000000040040000000101").slice(0, 9);
+    return Duml.batteryMillivolts(payload) == 4102 && Duml.batteryMilliamps(payload) == -213
+        && Duml.batteryPercent(4102) == 74 && Duml.batteryPercent(3000) == 0 && Duml.batteryPercent(4500) == 100;
+}

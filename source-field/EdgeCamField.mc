@@ -51,6 +51,17 @@ class EdgeCamField extends WatchUi.DataField {
         _link.toggleRecord();
     }
 
+    // Joins the known parts with " | ", skipping unknown (null) ones
+    hidden function join(parts) {
+        var text = "";
+        for (var i = 0; i < parts.size(); i++) {
+            if (parts[i] != null) {
+                text += (text.length() > 0 ? " | " : "") + parts[i];
+            }
+        }
+        return text;
+    }
+
     function onUpdate(dc) {
         var w = dc.getWidth();
         var h = dc.getHeight();
@@ -60,12 +71,16 @@ class EdgeCamField extends WatchUi.DataField {
 
         if (_link.recording) {
             background = RED;
-            title = "REC";
-            detail = "Lap to stop";
+            var secs = _link.recordingSeconds();
+            title = secs != null ? (secs / 60).format("%02d") + ":" + (secs % 60).format("%02d") : "REC";
+            detail = join(["REC", _link.batteryText()]);
         } else if (_link.connected) {
             background = NAVY;
             title = "READY";
-            detail = "Lap to record";
+            detail = join([_link.batteryText(), _link.storageText()]);
+            if (detail.length() == 0) {
+                detail = "Lap to record";
+            }
         } else if (_link.phase == CameraLink.PAIRING) {
             background = AMBER;
             title = _link.verifyCode != null ? _link.verifyCode.toString() : "PAIR";

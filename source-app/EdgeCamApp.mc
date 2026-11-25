@@ -64,6 +64,12 @@ class MainView extends WatchUi.View {
         if (_link.verifyCode != null) {
             y = line(dc, y, Graphics.FONT_XTINY, "Code " + _link.verifyCode, Graphics.COLOR_LT_GRAY);
         }
+        if (_link.batteryMv != null) {
+            y = line(dc, y, Graphics.FONT_XTINY, "Battery " + _link.batteryText() + " (" + _link.batteryMv + " mV, " + _link.batteryMa + " mA)", Graphics.COLOR_LT_GRAY);
+        }
+        if (_link.freeMb != null) {
+            y = line(dc, y, Graphics.FONT_XTINY, "Free " + _link.storageText() + " (" + _link.freeMb + " MB)", Graphics.COLOR_LT_GRAY);
+        }
         y += 6;
         for (var i = 0; i < _link.logLines.size(); i++) {
             y = line(dc, y, Graphics.FONT_XTINY, _link.logLines[i], Graphics.COLOR_DK_GRAY);

@@ -33,6 +33,14 @@ its manufacturer data or service uuid in the scan result.
 
 Other findings from the captures:
 
+- **Mac test bench**: `tools/nanoprobe.py` (Python + `bleak`) runs the same session from a Mac, which gets
+  full-size packets, and sends read-only queries. The Nano answers `02/70` (system state), `02/71` (storage:
+  free MB in bytes 6-9 of the reply) and `0d/02` (battery); it answers `e0` (not supported) to `02/76`, `02/59`
+  (GPS get), `02/11`, `0d/01`, `0d/03` and `0d/06`. Command names come from the community DUML dissectors in
+  [dji-firmware-tools](https://github.com/o-gs/dji-firmware-tools).
+- **What the field shows**: free storage (polled with `02/71`), an approximate battery level from the voltage
+  in the `0d/02` push (bytes 1-4; bytes 5-8 are the current, positive while charging), and the recording time
+  counted by the Edge.
 - **Camera battery**: byte 20 of the payload of the `0d/02` message the camera pushes from address `0x05`
   (read 74 while the camera showed 74 %). The Edge cannot read it: Connect IQ only delivers the first 20 bytes
   of each notification (11-byte header + 9 payload bytes). It would need a query with a short reply.

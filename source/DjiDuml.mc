@@ -290,6 +290,46 @@ module Duml {
         return encode(APP, request.src, request.seq, RESPONSE, request.cmdSet, request.cmdId, request.payload);
     }
 
+    // 02/71 to the camera (SDcard Info Get). Bytes 6-9 of the reply are the free space in MB; on the Edge
+    // the reply is cut after byte 8, which still covers up to 16 TB.
+    function sdcardInfo(seq) {
+        return encode(APP, CAMERA, seq, REQUEST, 0x02, 0x71, []b);
+    }
+
+    function freeMegabytes(payload) {
+        if (payload.size() < 9 || payload[0] != 0x00) {
+            return null;
+        }
+        return payload[6] | (payload[7] << 8) | (payload[8] << 16);
+    }
+
+    // 0d/02 battery data (pushed by the battery at 0x05): bytes 1-4 voltage in mV, bytes 5-8 current
+    // in mA (negative while discharging). The exact percentage is byte 20, out of reach on the Edge.
+    function batteryMillivolts(payload) {
+        return payload.size() >= 5 ? payload[1] | (payload[2] << 8) | (payload[3] << 16) | (payload[4] << 24) : null;
+    }
+
+    function batteryMilliamps(payload) {
+        return payload.size() >= 9 ? payload[5] | (payload[6] << 8) | (payload[7] << 16) | (payload[8] << 24) : null;
+    }
+
+    // Rough state of charge from the voltage of a resting or discharging cell. Anchored on one measured
+    // point (4102 mV = 74 %); the rest follows a typical high-voltage Li-ion curve. Approximate only.
+    const CURVE_MV = [3450, 3600, 3750, 3900, 4100, 4350];
+    const CURVE_PCT = [0, 10, 30, 50, 74, 100];
+
+    function batteryPercent(mv) {
+        if (mv <= CURVE_MV[0]) {
+            return 0;
+        }
+        for (var i = 1; i < CURVE_MV.size(); i++) {
+            if (mv <= CURVE_MV[i]) {
+                return CURVE_PCT[i - 1] + (CURVE_PCT[i] - CURVE_PCT[i - 1]) * (mv - CURVE_MV[i - 1]) / (CURVE_MV[i] - CURVE_MV[i - 1]);
+            }
+        }
+        return 100;
+    }
+
     // 02/80 camera status pushed twice a second: bit 7 of byte 0 is set while recording
     function isRecording(status) {
         return status.size() > 0 && (status[0] & 0x80) != 0;

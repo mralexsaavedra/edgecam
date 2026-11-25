@@ -23,6 +23,7 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
     // After the camera accepts a start/stop, its status push can lag behind for a moment
     const STATUS_HOLD_MS = 1500;
     const LOG_LINES = 10;
+    const STORAGE_POLL_MS = 30000;
 
     // Phases, for the screen
     enum {
@@ -42,6 +43,11 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
     var connected = false;
     var recording = false;
     var logLines = [];
+    // Camera data, null until known
+    var batteryMv = null;
+    var batteryMa = null;
+    var freeMb = null;
+    var recordingSince = null;
 
     hidden var _device = null;
     hidden var _write = null;
@@ -58,6 +64,7 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
     hidden var _requestedStart = false;
     hidden var _statusHoldUntil = 0;
     hidden var _keysSeen = [];
+    hidden var _lastStoragePoll = 0;
 
     function initialize() {
         BleDelegate.initialize();
@@ -149,6 +156,10 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
             log("No write callback, continuing");
             _busy = false;
             pump();
+        }
+        if (connected && (_lastStoragePoll == 0 || now - _lastStoragePoll >= STORAGE_POLL_MS)) {
+            _lastStoragePoll = now;
+            send(Duml.sdcardInfo(nextSeq()));
         }
         if (phase == DISCONNECTED && now - _lostAt > RESCAN_AFTER_MS) {
             startScan();
@@ -286,9 +297,12 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
             if (System.getTimer() >= _statusHoldUntil) {
                 recording = Duml.isRecording(frame.payload);
             }
-            if (recording != wasRecording) {
-                log(recording ? "Camera RECORDING" : "Camera stopped");
-            }
+            noteRecordingChange(wasRecording);
+            return;
+        }
+        if (frame.isCommand(0x0D, 0x02) && !frame.isResponse()) {
+            batteryMv = Duml.batteryMillivolts(frame.payload);
+            batteryMa = Duml.batteryMilliamps(frame.payload);
             return;
         }
         if (frame.isResponse()) {
@@ -300,8 +314,15 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
                 log("REC reply " + Duml.toHex(frame.payload));
                 // 00 means accepted: trust it until the status push catches up
                 if (frame.payload.size() > 0 && frame.payload[0] == 0x00) {
+                    var wasRecording = recording;
                     recording = _requestedStart;
                     _statusHoldUntil = System.getTimer() + STATUS_HOLD_MS;
+                    noteRecordingChange(wasRecording);
+                }
+            } else if (frame.isCommand(0x02, 0x71)) {
+                var mb = Duml.freeMegabytes(frame.payload);
+                if (mb != null) {
+                    freeMb = mb;
                 }
             } else {
                 noteKey("resp " + frame.key());
@@ -315,6 +336,38 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
         } else {
             noteKey(frame.src.format("%02X") + " " + frame.key());
         }
+    }
+
+    hidden function noteRecordingChange(wasRecording) {
+        if (recording == wasRecording) {
+            return;
+        }
+        recordingSince = recording ? System.getTimer() : null;
+        log(recording ? "Camera RECORDING" : "Camera stopped");
+    }
+
+    // Seconds recorded, counted by the Edge from the moment the camera confirmed it records
+    function recordingSeconds() {
+        return recordingSince == null ? null : (System.getTimer() - recordingSince) / 1000;
+    }
+
+    // "~74%", "CHG" while charging, or null when unknown
+    function batteryText() {
+        if (batteryMv == null) {
+            return null;
+        }
+        if (batteryMa != null && batteryMa > 0) {
+            return "CHG";
+        }
+        return "~" + Duml.batteryPercent(batteryMv) + "%";
+    }
+
+    // "46GB" (or "850MB" below 1 GB), or null when unknown
+    function storageText() {
+        if (freeMb == null) {
+            return null;
+        }
+        return freeMb >= 1024 ? (freeMb / 1024) + "GB" : freeMb + "MB";
     }
 
     hidden function markConnected() {
@@ -377,6 +430,8 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
         _busy = false;
         _sessionStarted = false;
         _statusHoldUntil = 0;
+        _lastStoragePoll = 0;
+        recordingSince = null;
     }
 
     // Logs each new kind of camera message once
