@@ -5,3 +5,4 @@ bin/
 *.pem
 .DS_Store
 dist/
+*.pklg
