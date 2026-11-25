@@ -85,7 +85,10 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
             });
             state = "Registering BLE profile";
         } catch (e) {
-            fail("registerProfile failed: " + e.getErrorMessage());
+            // Seen in the simulator when the app restarts in the same session: the profile is
+            // already registered, so scanning can go ahead anyway
+            log("registerProfile: " + e.getErrorMessage());
+            startScan();
         }
         _timer.start(method(:tick), 250, true);
     }
