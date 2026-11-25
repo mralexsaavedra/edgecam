@@ -49,6 +49,7 @@ class EdgeCamField extends WatchUi.DataField {
     hidden var _clipsField;
     hidden var _clips = 0;
     hidden var _wasRecording = false;
+    hidden var _background = 0;
 
     function initialize(link) {
         DataField.initialize();
@@ -119,6 +120,7 @@ class EdgeCamField extends WatchUi.DataField {
             background = AMBER;
         }
         var ink = (background == GREY || background == AMBER) ? NAVY : WHITE;
+        _background = background;
         dc.setColor(ink, background);
         dc.clear();
 
@@ -129,14 +131,15 @@ class EdgeCamField extends WatchUi.DataField {
 
         // Value in a big number font, unit small beside it, as Garmin's own data fields do
         var percent = _link.batteryPercent();
-        var batteryValue = _link.charging() ? "CHG" : (percent != null ? percent.toString() : "--");
-        var batteryUnit = _link.charging() ? "" : "%";
+        // Always the number; charging shows as a bolt inside the battery drawing
+        var batteryValue = percent != null ? percent.toString() : "--";
+        var batteryUnit = "%";
         var mb = _link.freeMb;
         var storageValue = mb == null ? "--" : (mb >= 1024 ? (mb / 1024).toString() : mb.toString());
         var storageUnit = mb != null && mb < 1024 ? "MB" : "GB";
-        var batteryColor = colorForBattery(_link.charging() ? null : percent, background);
+        var batteryColor = colorForBattery(percent, background);
         var mainRow = [:main, main, ink, dot];
-        var batteryRow = [:icon, batteryValue, batteryColor, :battery, percent, batteryUnit];
+        var batteryRow = [:icon, batteryValue, batteryColor, _link.charging() ? :charging : :battery, percent, batteryUnit];
         var storageRow = [:icon, storageValue, ink, :card, null, storageUnit];
 
         if (h > w * 3 / 4) {
@@ -236,14 +239,14 @@ class EdgeCamField extends WatchUi.DataField {
         var unitFont = Graphics.FONT_SMALL;
         var unitW = unit.length() > 0 ? dc.getTextWidthInPixels(unit, unitFont) + 2 : 0;
         var iconH = glyphH * 3 / 4;
-        var iconW = icon == :battery ? iconH * 7 / 4 : iconH * 3 / 4;
+        var iconW = icon == :card ? iconH * 3 / 4 : iconH * 7 / 4;
         var gap = iconH / 2;
         var tw = dc.getTextWidthInPixels(text, font);
         var left = x + (w - iconW - gap - tw - unitW) / 2;
         var iy = baseline - glyphH + (glyphH - iconH) / 2;
         dc.setColor(color, Graphics.COLOR_TRANSPARENT);
         dc.setPenWidth(2);
-        if (icon == :battery) {
+        if (icon != :card) {
             var nub = iconH / 6 + 1;
             var bodyW = iconW - nub;
             dc.drawRectangle(left, iy, bodyW, iconH);
@@ -251,6 +254,18 @@ class EdgeCamField extends WatchUi.DataField {
             if (level != null) {
                 var fillW = (bodyW - 6) * (level > 100 ? 100 : level) / 100;
                 dc.fillRectangle(left + 3, iy + 3, fillW, iconH - 6);
+            }
+            if (icon == :charging) {
+                // Lightning bolt across the battery, in the background colour with an outline
+                var cx = left + bodyW / 2;
+                var t = iy + 2;
+                var b = iy + iconH - 2;
+                var m = iy + iconH / 2;
+                var u = iconH / 4;
+                var bolt = [[cx + u / 2, t], [cx - u, m + 1], [cx, m + 1], [cx - u / 2, b], [cx + u, m - 1], [cx, m - 1]];
+                dc.setColor(_background, Graphics.COLOR_TRANSPARENT);
+                dc.fillPolygon(bolt);
+                dc.setColor(color, Graphics.COLOR_TRANSPARENT);
             }
         } else {
             // SD card: rectangle with a clipped corner

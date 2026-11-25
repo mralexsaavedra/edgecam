@@ -380,8 +380,9 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
         return batteryMv == null ? null : Duml.batteryPercent(batteryMv);
     }
 
+    // Above 30 mA: on external power with a full battery the current wobbles around zero
     function charging() {
-        return batteryMa != null && batteryMa > 0;
+        return batteryMa != null && batteryMa > 30;
     }
 
     // "~74%", "CHG" while charging, or null when unknown
