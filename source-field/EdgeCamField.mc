@@ -50,6 +50,10 @@ class EdgeCamField extends WatchUi.DataField {
     hidden var _clips = 0;
     hidden var _wasRecording = false;
     hidden var _background = 0;
+    // Big text font built by tools/mkfont.py (Barlow Condensed Bold, only the letters below): the
+    // system text fonts stop at FONT_LARGE, which left REC smaller than the numbers
+    const BIG_GLYPHS = "RECSTOPBUSYAMI.";
+    hidden var _bigFonts;
 
     function initialize(link) {
         DataField.initialize();
@@ -60,12 +64,24 @@ class EdgeCamField extends WatchUi.DataField {
             { :mesgType => FitContributor.MESG_TYPE_RECORD, :units => "clip" });
         _clipsField = createField("camera_clips", 2, FitContributor.DATA_TYPE_UINT16,
             { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "clip" });
+        _bigFonts = [
+            WatchUi.loadResource(Rez.Fonts.BigText104),
+            WatchUi.loadResource(Rez.Fonts.BigText80),
+            WatchUi.loadResource(Rez.Fonts.BigText60)
+        ];
         _recField.setData(0);
         _clipField.setData(0);
         _clipsField.setData(0);
     }
 
+    hidden var _memLogged = false;
+
     function compute(info) {
+        if (!_memLogged) {
+            _memLogged = true;
+            var stats = System.getSystemStats();
+            System.println("Memory used " + stats.usedMemory + " of " + stats.totalMemory);
+        }
         _link.tick();
         var recording = _link.recording;
         if (recording && !_wasRecording) {
@@ -305,11 +321,31 @@ class EdgeCamField extends WatchUi.DataField {
         return background == NAVY ? 0xFF6B6B : 0xB00020;
     }
 
-    // Number fonts for digits (timer, code, percentages), text fonts otherwise
+    // Number fonts for digits (timer, code, percentages); the big text font for the words it has
+    // (REC, STOP, BUSY, CAM, PAIR); system text fonts otherwise
     hidden function fontsFor(text) {
-        return isNumeric(text)
-            ? [Graphics.FONT_NUMBER_THAI_HOT, Graphics.FONT_NUMBER_HOT, Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD, Graphics.FONT_LARGE, Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY]
-            : [Graphics.FONT_LARGE, Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY, Graphics.FONT_XTINY];
+        if (isNumeric(text)) {
+            return [Graphics.FONT_NUMBER_THAI_HOT, Graphics.FONT_NUMBER_HOT, Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD, Graphics.FONT_LARGE, Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY];
+        }
+        var system = [Graphics.FONT_LARGE, Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY, Graphics.FONT_XTINY];
+        if (!hasOnly(text, BIG_GLYPHS)) {
+            return system;
+        }
+        // New list each time: addAll changes the array it is called on
+        var fonts = [];
+        fonts.addAll(_bigFonts);
+        fonts.addAll(system);
+        return fonts;
+    }
+
+    hidden function hasOnly(text, allowed) {
+        var chars = text.toCharArray();
+        for (var i = 0; i < chars.size(); i++) {
+            if (allowed.find(chars[i].toString()) == null) {
+                return false;
+            }
+        }
+        return chars.size() > 0;
     }
 
     // First font in the list whose rendering of text fits in maxW x maxH, or null

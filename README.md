@@ -105,6 +105,12 @@ Logs also go to `Garmin/Apps/Logs/EDGECAM.TXT` if you create that empty file bef
 - `FFF5` is write-without-response; if the Edge never calls back after such writes, a 1 s watchdog
   moves on to the next chunk.
 
+## Big text font
+
+Connect IQ's system text fonts stop at `FONT_LARGE`, so the field carries its own big font for the words it
+shows (REC, STOP, BUSY, CAM, PAIR): Barlow Condensed Bold, built into bitmap fonts by `tools/mkfont.py`
+(`resources-field/fonts/`). Barlow is under the SIL Open Font License 1.1, see `licenses/OFL-BarlowCondensed.txt`.
+
 ## Credits and license
 
 The protocol code is ported from [BiciCAM](https://github.com/apradoperez/bicicam) (MIT, BiciLAB Factory SL,
