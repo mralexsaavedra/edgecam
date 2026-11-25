@@ -90,6 +90,14 @@ The simulator cannot talk to the camera: the Bluetooth part only runs on the rea
 
 ## Install on the Edge 540
 
+From the command line (macOS, `brew install libmtp`): `tools/mtpsend.c` copies a file into a folder of the Edge by
+folder id, because `mtp-sendfile` cannot resolve Garmin's folder paths. Build it with
+`cc -o mtpsend tools/mtpsend.c $(pkg-config --cflags --libs libmtp)`, find the `Apps` folder id with `mtp-folders`,
+delete an older copy still in `Apps` with `mtp-delfile -n <id>` (the Edge refuses a second file with the same name),
+then run `./mtpsend bin/edgecam-field.prg EDGECAMF.PRG <apps id>`.
+
+Or with a file manager:
+
 Connect the Edge over USB (on macOS use [OpenMTP](https://openmtp.ganeshrvel.com/)) and copy
 `bin/edgecam.prg` into `Garmin/Apps/`. Unplug; the app shows up under Connect IQ apps.
 
