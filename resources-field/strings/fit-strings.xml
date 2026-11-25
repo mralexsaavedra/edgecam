@@ -1,0 +1,9 @@
+<strings>
+    <string id="RecChartTitle">Camera recording</string>
+    <string id="RecLabel">Recording</string>
+    <string id="RecUnit">on/off</string>
+    <string id="ClipChartTitle">Camera clip</string>
+    <string id="ClipLabel">Clip</string>
+    <string id="ClipUnit">clip</string>
+    <string id="ClipsLabel">Camera clips</string>
+</strings>

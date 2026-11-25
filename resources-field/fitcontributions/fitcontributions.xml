@@ -1,0 +1,8 @@
+<fitContributions>
+    <fitField id="0" displayInChart="true" sortOrder="0" precision="0"
+        chartTitle="@Strings.RecChartTitle" dataLabel="@Strings.RecLabel" unitLabel="@Strings.RecUnit" fillColor="#C62828" />
+    <fitField id="1" displayInChart="true" sortOrder="1" precision="0"
+        chartTitle="@Strings.ClipChartTitle" dataLabel="@Strings.ClipLabel" unitLabel="@Strings.ClipUnit" fillColor="#14244A" />
+    <fitField id="2" displayInActivitySummary="true" sortOrder="2" precision="0"
+        dataLabel="@Strings.ClipsLabel" unitLabel="@Strings.ClipUnit" />
+</fitContributions>

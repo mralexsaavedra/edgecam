@@ -3,6 +3,7 @@
 // and compute(), called once per second, drives the link's keep-alive.
 
 import Toybox.Application;
+import Toybox.FitContributor;
 import Toybox.Graphics;
 import Toybox.Lang;
 import Toybox.WatchUi;
@@ -36,14 +37,39 @@ class EdgeCamField extends WatchUi.DataField {
     const GREY = 0x555555;
 
     hidden var _link;
+    // Written to the activity's FIT file so each clip can be placed on the route afterwards:
+    // per second, whether the camera records and which clip it is (0 when not recording),
+    // and in the summary how many clips were recorded.
+    hidden var _recField;
+    hidden var _clipField;
+    hidden var _clipsField;
+    hidden var _clips = 0;
+    hidden var _wasRecording = false;
 
     function initialize(link) {
         DataField.initialize();
         _link = link;
+        _recField = createField("camera_recording", 0, FitContributor.DATA_TYPE_UINT8,
+            { :mesgType => FitContributor.MESG_TYPE_RECORD, :units => "on/off" });
+        _clipField = createField("camera_clip", 1, FitContributor.DATA_TYPE_UINT16,
+            { :mesgType => FitContributor.MESG_TYPE_RECORD, :units => "clip" });
+        _clipsField = createField("camera_clips", 2, FitContributor.DATA_TYPE_UINT16,
+            { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "clip" });
+        _recField.setData(0);
+        _clipField.setData(0);
+        _clipsField.setData(0);
     }
 
     function compute(info) {
         _link.tick();
+        var recording = _link.recording;
+        if (recording && !_wasRecording) {
+            _clips++;
+            _clipsField.setData(_clips);
+        }
+        _wasRecording = recording;
+        _recField.setData(recording ? 1 : 0);
+        _clipField.setData(recording ? _clips : 0);
         return null;
     }
 

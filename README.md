@@ -11,7 +11,12 @@ Two builds share the camera code in `source/`:
 - `app.jungle`: a **diagnostic app** (`source-app/`) with the state and a log on screen; ENTER toggles
   recording. It also carries the R SDK code for the Osmo Action line (`source-rsdk/`).
 
-Not done yet: GPS push, markers, camera battery.
+The data field also writes to the activity's FIT file, so each clip can be placed on the route: per second
+`camera_recording` (0/1) and `camera_clip` (clip number, 0 when not recording), and `camera_clips` (total) in the
+session summary. Garmin Connect shows them as charts. Start and stop also mark laps.
+
+Not available on the Nano: GPS in the video and highlight markers (the camera answers `e0`, not supported,
+to the GPS `00/17` and `00/53` and key-report `00/11` commands; DJI lists neither feature for the Nano).
 
 ## How it talks to the Nano
 
