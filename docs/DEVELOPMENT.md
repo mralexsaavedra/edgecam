@@ -28,6 +28,17 @@
    monkeyc -d edge540 -f app.jungle -o bin/edgecam-app.prg -y key.der      # debug app
    ```
 
+Release files (no debug info, about 40 KB each) for every model and the `.iq` package for the Connect IQ Store:
+
+```sh
+for d in edge540 edge840 edge550 edge850 edge1040 edge1050; do
+  monkeyc -r -d $d -f monkey.jungle -o dist/EdgeCam-$d.prg -y key.der
+done
+monkeyc -e -r -f monkey.jungle -o dist/EdgeCam.iq -y key.der
+```
+
+The version is `version` in `manifest.xml`; record changes in `CHANGELOG.md`.
+
 ## Tests
 
 Unit tests run in the simulator (DUML frames against bytes captured from a working remote, the R SDK against DJI's

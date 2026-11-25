@@ -4,3 +4,4 @@ bin/
 *.der
 *.pem
 .DS_Store
+dist/

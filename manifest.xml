@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <iq:manifest version="3" xmlns:iq="http://www.garmin.com/xml/connectiq">
-    <iq:application id="648fbb99c3a340f880b3369421e2fa97" type="datafield" name="@Strings.FieldName"
+    <iq:application version="0.1.0" id="648fbb99c3a340f880b3369421e2fa97" type="datafield" name="@Strings.FieldName"
         entry="EdgeCamFieldApp" launcherIcon="@Drawables.LauncherIcon" minApiLevel="3.1.0">
         <iq:products>
             <iq:product id="edge540"/>
