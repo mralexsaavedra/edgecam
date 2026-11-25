@@ -6,12 +6,25 @@ Minimal Connect IQ app to check whether a **Garmin Edge 540** can control a **DJ
 Scope of this prototype: scan, connect, pair, start/stop recording, and show what the camera reports.
 No data field, no GPS push, no markers yet.
 
-## Why it might work
+## How it talks to the Nano
 
-- The Osmo Nano advertises DJI's manufacturer id (`0x08AA`) and service `FFF0`, with `FFF4` (notify)
-  and `FFF5` (write without response): the same layout DJI's remote protocol uses on the Osmo Action line.
-- DJI's own docs still list the Nano as "not supported yet", and its advert byte 2 is `0x80` instead of
-  the documented `0xFA`. So this filters on `0x08AA` + `FFF0` only.
+The Osmo Nano ignores DJI's documented remote protocol (R SDK, frames starting with `0xAA`).
+It speaks **DUML** (frames starting with `0x55`), DJI's internal protocol, over the same `FFF0` service:
+`FFF5` to write, `FFF4` for notifications.
+
+The session in `source/CameraLink.mc` mirrors a Bluetooth capture of a working iOS remote:
+
+1. Enable notifications on `FFF3`, `FFF4`, `FFF5`, `FFF7`.
+2. Send `00/2B 04 00` (hello) and `07/45` (connect: a 32-char remote id and a short name).
+3. Send `00/2B 01 01` every second (keep-alive).
+4. Answer the camera's `00/81` request with a fixed payload and echo its `00/74` request.
+5. Record with `02/02 01`, stop with `02/02 00` (to the camera, address `0x01`).
+6. The camera pushes `02/80` status twice a second; bit 7 of the first byte is set while recording.
+
+On the Edge 540 the Nano is matched by its advertised name (`OsmoNano-...`): Connect IQ does not expose
+its manufacturer data or service uuid in the scan result.
+
+The R SDK code for the Osmo Action line (`source/DjiProtocol.mc`) is kept for later.
 
 ## Build
 
