@@ -15,7 +15,7 @@ import Toybox.WatchUi;
 class CameraLink extends BluetoothLowEnergy.BleDelegate {
     const CHUNK = 20;
     const WRITE_ACK_TIMEOUT_MS = 1000;
-    const LOG_LINES = 5;
+    const LOG_LINES = 10;
 
     // What the screen shows
     var state = "Starting";
@@ -41,6 +41,8 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
     hidden var _lastAckAt = 0;
     hidden var _scanning = false;
     hidden var _timer;
+    hidden var _advertsSeen = 0;
+    hidden var _namesSeen = [];
 
     function initialize() {
         BleDelegate.initialize();
@@ -149,14 +151,22 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
         }
         var r = results.next();
         while (r != null) {
+            _advertsSeen++;
             var data = r.getManufacturerSpecificData(Dji.COMPANY_ID);
-            // Unlike BiciCAM, do not require byte 2 == 0xFA: the Osmo Nano advertises 0x80 there
-            if (data != null && advertisesDjiService(r)) {
-                onCameraFound(r, data);
+            var name = r.getDeviceName();
+            var byName = name != null && name.find("Osmo") == 0;
+            var byService = advertisesDjiService(r);
+            noteDevice(name, data != null, byService);
+            // Unlike BiciCAM, do not require byte 2 == 0xFA: the Osmo Nano advertises 0x80 there.
+            // Any one signal is enough: Connect IQ may not expose every advert field.
+            if (data != null || byService || byName) {
+                log("Match: mfr=" + (data != null) + " svc=" + byService + " name=" + byName);
+                onCameraFound(r, data != null ? data : []b);
                 return;
             }
             r = results.next();
         }
+        state = "Scanning (" + _advertsSeen + " adverts)";
     }
 
     function onConnectedStateChanged(device, connectionState) {
@@ -234,6 +244,15 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
         } catch (e) {
             fail("pairDevice failed: " + e.getErrorMessage());
         }
+    }
+
+    // Logs each new named device once, to see what the Edge actually hears
+    hidden function noteDevice(name, hasDjiData, hasService) {
+        if (name == null || _namesSeen.indexOf(name) >= 0 || _namesSeen.size() >= 8) {
+            return;
+        }
+        _namesSeen.add(name);
+        log("Saw " + name + (hasDjiData ? " +mfr" : "") + (hasService ? " +svc" : ""));
     }
 
     hidden function advertisesDjiService(result) {
