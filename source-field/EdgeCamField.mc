@@ -87,6 +87,7 @@ class EdgeCamField extends WatchUi.DataField {
             System.println("Memory used " + stats.usedMemory + " of " + stats.totalMemory);
         }
         _link.tick();
+        announce();
         if (!_autoStopped && AutoStop.due(_pausedSince, System.getTimer(), autoStopMinutes(), _link.recording)) {
             _autoStopped = true;
             _link.stopRecording("paused " + autoStopMinutes() + " min");
@@ -100,6 +101,55 @@ class EdgeCamField extends WatchUi.DataField {
         _recField.setData(recording ? 1 : 0);
         _clipField.setData(recording ? _clips : 0);
         return null;
+    }
+
+    // State line under CAM, in the Edge's language
+    hidden function phaseText() {
+        var p = _link.phase;
+        if (p == CameraLink.SCANNING) {
+            return text(Rez.Strings.Searching);
+        } else if (p == CameraLink.CONNECTING) {
+            return text(Rez.Strings.Connecting);
+        } else if (p == CameraLink.DISCONNECTED) {
+            return text(Rez.Strings.LostRetrying);
+        } else if (p == CameraLink.FAILED) {
+            return text(Rez.Strings.BluetoothError);
+        }
+        return text(Rez.Strings.Starting);
+    }
+
+    hidden function text(id) {
+        return WatchUi.loadResource(id);
+    }
+
+    // One camera event per second as a full-screen alert (the rider must allow this app's alerts
+    // in the activity profile's alert settings)
+    hidden function announce() {
+        var e = _link.takeEvent();
+        if (e == null) {
+            return;
+        }
+        var id = Rez.Strings.AlertStopped;
+        var colour = AMBER;
+        if (e == :lost) {
+            id = Rez.Strings.AlertLost;
+        } else if (e == :noSignal) {
+            id = Rez.Strings.AlertNoSignal;
+        } else if (e == :battery20) {
+            id = Rez.Strings.AlertBattery20;
+        } else if (e == :battery10) {
+            id = Rez.Strings.AlertBattery10;
+            colour = RED;
+        } else if (e == :storageLow) {
+            id = Rez.Strings.AlertStorage;
+        }
+        var msg = text(id);
+        System.println("Alert: " + msg);
+        try {
+            showAlert(new CameraAlert(msg, colour));
+        } catch (ex) {
+            System.println("showAlert: " + ex.getErrorMessage());
+        }
     }
 
     function onTimerLap() {
@@ -148,7 +198,7 @@ class EdgeCamField extends WatchUi.DataField {
         var h = dc.getHeight();
         var background = GREY;
         var main = "CAM";
-        var sub = _link.state;
+        var sub = phaseText();
         var showData = false;
         var dot = false;
         var now = System.getTimer();
@@ -157,11 +207,14 @@ class EdgeCamField extends WatchUi.DataField {
             // Sent, waiting for the camera to confirm: amber, as BiciCAM does for "wait"
             background = AMBER;
             main = _link.pending == :start ? "REC..." : "STOP...";
-            sub = "Waiting for camera";
+            sub = text(Rez.Strings.Waiting);
         } else if (_link.refused != null && now < _link.refusedUntil) {
             background = AMBER;
-            main = "BUSY";
-            sub = _link.refused;
+            sub = text(Rez.Strings.Busy);
+        } else if (_link.signalLost()) {
+            // Recording but silent: do not keep counting as if all was well
+            background = AMBER;
+            sub = text(Rez.Strings.NoSignal);
         } else if (_link.recording) {
             background = RED;
             var secs = _link.recordingSeconds();
@@ -176,7 +229,7 @@ class EdgeCamField extends WatchUi.DataField {
         } else if (_link.phase == CameraLink.PAIRING) {
             background = AMBER;
             main = _link.verifyCode != null ? _link.verifyCode.toString() : "PAIR";
-            sub = "Accept on camera";
+            sub = text(Rez.Strings.AcceptOnCamera);
         } else if (_link.phase == CameraLink.FAILED) {
             background = AMBER;
         }
@@ -413,5 +466,69 @@ class EdgeCamField extends WatchUi.DataField {
             }
         }
         return chars.size() > 0;
+    }
+}
+
+// Full-screen alert pushed by the field: the message on the state colour
+class CameraAlert extends WatchUi.DataFieldAlert {
+    hidden var _msg;
+    hidden var _colour;
+
+    function initialize(msg, colour) {
+        DataFieldAlert.initialize();
+        _msg = msg;
+        _colour = colour;
+    }
+
+    function onUpdate(dc) {
+        var ink = _colour == 0xF59300 ? 0x1F2555 : 0xFFFFFF;
+        dc.setColor(ink, _colour);
+        dc.clear();
+        var w = dc.getWidth();
+        var h = dc.getHeight();
+        var fonts = [Graphics.FONT_LARGE, Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY];
+        // One line if it fits, otherwise split at the middle space
+        var lines = [_msg];
+        var font = null;
+        for (var i = 0; i < fonts.size() && font == null; i++) {
+            if (dc.getTextWidthInPixels(_msg, fonts[i]) <= w - 16) {
+                font = fonts[i];
+            }
+        }
+        if (font == null) {
+            lines = split(_msg);
+            for (var i = 0; i < fonts.size() && font == null; i++) {
+                var fits = true;
+                for (var j = 0; j < lines.size(); j++) {
+                    fits = fits && dc.getTextWidthInPixels(lines[j], fonts[i]) <= w - 16;
+                }
+                if (fits) {
+                    font = fonts[i];
+                }
+            }
+        }
+        if (font == null) {
+            font = Graphics.FONT_XTINY;
+        }
+        var lh = dc.getFontHeight(font);
+        var top = (h - lh * lines.size()) / 2;
+        for (var i = 0; i < lines.size(); i++) {
+            dc.drawText(w / 2, top + i * lh, font, lines[i], Graphics.TEXT_JUSTIFY_CENTER);
+        }
+    }
+
+    hidden function split(msg) {
+        var chars = msg.toCharArray();
+        var mid = chars.size() / 2;
+        var best = -1;
+        for (var i = 0; i < chars.size(); i++) {
+            if (chars[i] == ' ' && (best < 0 || (i - mid).abs() < (best - mid).abs())) {
+                best = i;
+            }
+        }
+        if (best < 0) {
+            return [msg];
+        }
+        return [msg.substring(0, best), msg.substring(best + 1, msg.length())];
     }
 }

@@ -53,6 +53,13 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
     // Short message when the camera refused a command, shown until refusedUntil
     var refused = null;
     var refusedUntil = 0;
+    // Events for the owner to announce (:stopped, :lost, :noSignal, :battery20, :battery10, :storageLow)
+    hidden var _events = [];
+    hidden var _userStop = false;
+    hidden var _lastStatusAt = 0;
+    hidden var _noSignalAnnounced = false;
+    hidden var _batteryAlertedAt = 100;
+    hidden var _storageAlerted = false;
 
     hidden var _device = null;
     hidden var _write = null;
@@ -146,10 +153,43 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
             return;
         }
         _requestedStart = !recording;
+        _userStop = !_requestedStart;
         pending = _requestedStart ? :start : :stop;
         _pendingSince = System.getTimer();
         log(_requestedStart ? "Sending START" : "Sending STOP");
         send(Duml.record(nextSeq(), _requestedStart));
+    }
+
+    // Recording, but the camera has not sent its status (twice a second) for 5 s: it may have stopped
+    function signalLost() {
+        return connected && recording && _lastStatusAt != 0 && System.getTimer() - _lastStatusAt > 5000;
+    }
+
+    // Next event to announce, or null
+    function takeEvent() {
+        if (_events.size() == 0) {
+            return null;
+        }
+        var e = _events[0];
+        _events = _events.slice(1, null);
+        return e;
+    }
+
+    // Low battery alerts at 20 % and 10 % (estimated, not while charging), re-armed above 30 %
+    hidden function checkBattery() {
+        var pct = batteryPercent();
+        if (pct == null || charging()) {
+            return;
+        }
+        if (pct <= 10 && _batteryAlertedAt > 10) {
+            _batteryAlertedAt = 10;
+            _events.add(:battery10);
+        } else if (pct <= 20 && _batteryAlertedAt > 20) {
+            _batteryAlertedAt = 20;
+            _events.add(:battery20);
+        } else if (pct >= 30) {
+            _batteryAlertedAt = 100;
+        }
     }
 
     // Stops the camera if it records and nothing is in flight; reason goes to the log
@@ -159,6 +199,7 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
         }
         log("Auto stop: " + reason);
         _requestedStart = false;
+        _userStop = true;
         pending = :stop;
         _pendingSince = System.getTimer();
         send(Duml.record(nextSeq(), false));
@@ -188,6 +229,11 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
             if (freeMb == null) {
                 log("Storage query sent");
             }
+        }
+        if (signalLost() && !_noSignalAnnounced) {
+            _noSignalAnnounced = true;
+            log("No status while recording");
+            _events.add(:noSignal);
         }
         if (phase == DISCONNECTED && now - _lostAt > RESCAN_AFTER_MS) {
             startScan();
@@ -224,6 +270,9 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
     function onConnectedStateChanged(device, connectionState) {
         if (connectionState != BluetoothLowEnergy.CONNECTION_STATE_CONNECTED) {
             log("Link lost");
+            if (recording) {
+                _events.add(:lost);
+            }
             resetLink();
             _lostAt = System.getTimer();
             setPhase(DISCONNECTED, "Camera lost, retrying");
@@ -321,6 +370,8 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
 
     hidden function handleFrame(frame) {
         if (frame.isCommand(0x02, 0x80)) {
+            _lastStatusAt = System.getTimer();
+            _noSignalAnnounced = false;
             var wasRecording = recording;
             if (System.getTimer() >= _statusHoldUntil) {
                 recording = Duml.isRecording(frame.payload);
@@ -331,6 +382,7 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
         if (frame.isCommand(0x0D, 0x02) && !frame.isResponse()) {
             batteryMv = Duml.batteryMillivolts(frame.payload);
             batteryMa = Duml.batteryMilliamps(frame.payload);
+            checkBattery();
             return;
         }
         if (frame.isResponse()) {
@@ -359,6 +411,13 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
                 var mb = Duml.freeMegabytes(frame.payload);
                 if (mb != null) {
                     freeMb = mb;
+                    // Once below 2 GB; again only after going back above 3 GB
+                    if (mb < 2048 && !_storageAlerted) {
+                        _storageAlerted = true;
+                        _events.add(:storageLow);
+                    } else if (mb > 3072) {
+                        _storageAlerted = false;
+                    }
                 }
             } else {
                 noteKey("resp " + frame.key());
@@ -378,6 +437,11 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
         if (recording == wasRecording) {
             return;
         }
+        // Stopped without Lap or the auto stop: heat, full storage, the camera's own button...
+        if (wasRecording && !recording && !_userStop) {
+            _events.add(:stopped);
+        }
+        _userStop = false;
         recordingSince = recording ? System.getTimer() : null;
         log(recording ? "Camera RECORDING" : "Camera stopped");
     }
@@ -479,6 +543,8 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
         _lastStoragePoll = 0;
         recordingSince = null;
         pending = null;
+        _lastStatusAt = 0;
+        _userStop = false;
     }
 
     // Logs each new kind of camera message once

@@ -11,6 +11,12 @@ Two builds share the camera code in `source/`:
 - `app.jungle`: a **diagnostic app** (`source-app/`) with the state and a log on screen; ENTER toggles
   recording. It also carries the R SDK code for the Osmo Action line (`source-rsdk/`).
 
+Alerts (full screen, the Edge's own alert): recording stopped by the camera (not by Lap or the auto stop),
+camera lost while recording, camera not responding while recording, camera battery at 20 % and 10 %
+(estimated) and storage below 2 GB. The rider has to allow this field's alerts in the activity profile's
+alert settings. While recording, if the camera sends no status for 5 s the field turns amber with "No signal"
+instead of counting on. Texts are in English and Spanish, following the Edge's language.
+
 Pauses: the field keeps the camera as it was at traffic lights, but if the activity stays paused (auto-pause or the
 Start button) longer than a set time it stops the camera, and it always stops it when the activity is saved or
 discarded. The time is a field setting in the Garmin Connect app: never, 1, 2 (default), 5 or 10 minutes. While

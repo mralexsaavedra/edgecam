@@ -13,4 +13,19 @@
     <string id="AutoStop2">2 minutes</string>
     <string id="AutoStop5">5 minutes</string>
     <string id="AutoStop10">10 minutes</string>
+    <string id="Starting">Starting</string>
+    <string id="Searching">Looking for camera</string>
+    <string id="Connecting">Connecting</string>
+    <string id="AcceptOnCamera">Accept on camera</string>
+    <string id="LostRetrying">Camera lost, retrying</string>
+    <string id="BluetoothError">Bluetooth error</string>
+    <string id="Waiting">Waiting for camera</string>
+    <string id="Busy">Camera busy</string>
+    <string id="NoSignal">No signal</string>
+    <string id="AlertStopped">Recording stopped</string>
+    <string id="AlertLost">Camera lost while recording</string>
+    <string id="AlertNoSignal">Camera not responding</string>
+    <string id="AlertBattery20">Camera battery 20%</string>
+    <string id="AlertBattery10">Camera battery 10%</string>
+    <string id="AlertStorage">Camera storage almost full</string>
 </strings>

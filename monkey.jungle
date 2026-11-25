@@ -2,5 +2,7 @@
 project.manifest = manifest.xml
 base.sourcePath = source;source-field
 base.resourcePath = resources;resources-field
+# Spanish texts, picked when the Edge is in Spanish
+base.lang.spa = resources-field-spa
 # Prototype: keep the type checker out of the way until the protocol is proven on the device
 project.typecheck = 0

@@ -1,0 +1,31 @@
+<strings>
+    <string id="RecChartTitle">Grabación de la cámara</string>
+    <string id="RecLabel">Grabando</string>
+    <string id="RecUnit">sí/no</string>
+    <string id="ClipChartTitle">Clip de la cámara</string>
+    <string id="ClipLabel">Clip</string>
+    <string id="ClipUnit">clip</string>
+    <string id="ClipsLabel">Clips de la cámara</string>
+    <string id="AutoStopTitle">Parar la cámara tras una pausa de</string>
+    <string id="AutoStopPrompt">La cámara se para sola cuando la actividad lleva este tiempo en pausa. También se para al guardar o descartar la actividad.</string>
+    <string id="AutoStopNever">Nunca</string>
+    <string id="AutoStop1">1 minuto</string>
+    <string id="AutoStop2">2 minutos</string>
+    <string id="AutoStop5">5 minutos</string>
+    <string id="AutoStop10">10 minutos</string>
+    <string id="Starting">Iniciando</string>
+    <string id="Searching">Buscando la cámara</string>
+    <string id="Connecting">Conectando</string>
+    <string id="AcceptOnCamera">Acepta en la cámara</string>
+    <string id="LostRetrying">Cámara perdida, reintentando</string>
+    <string id="BluetoothError">Error de Bluetooth</string>
+    <string id="Waiting">Esperando a la cámara</string>
+    <string id="Busy">Cámara ocupada</string>
+    <string id="NoSignal">Sin señal</string>
+    <string id="AlertStopped">Grabación parada</string>
+    <string id="AlertLost">Cámara perdida grabando</string>
+    <string id="AlertNoSignal">La cámara no responde</string>
+    <string id="AlertBattery20">Batería de la cámara 20 %</string>
+    <string id="AlertBattery10">Batería de la cámara 10 %</string>
+    <string id="AlertStorage">Queda poco espacio en la cámara</string>
+</strings>

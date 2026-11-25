@@ -8,9 +8,11 @@
         <iq:permissions>
             <iq:uses-permission id="BluetoothLowEnergy"/>
             <iq:uses-permission id="FitContributor"/>
+            <iq:uses-permission id="DataFieldAlert"/>
         </iq:permissions>
         <iq:languages>
             <iq:language>eng</iq:language>
+            <iq:language>spa</iq:language>
         </iq:languages>
         <iq:barrels/>
     </iq:application>
