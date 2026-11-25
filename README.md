@@ -18,7 +18,7 @@ Free and open source. **Beta**: tested with one Osmo Nano and an Edge 540, not y
 
 For now it is installed by hand: it is not in the Connect IQ Store yet.
 
-1. Download the file for your Edge from the [releases page](../../releases/latest):
+1. Download the file for your Edge from the [releases page](../../releases):
    `EdgeCam-edge540.prg` (Edge 540 / 540 Solar), `EdgeCam-edge840.prg`, `EdgeCam-edge550.prg`,
    `EdgeCam-edge850.prg`, `EdgeCam-edge1040.prg` (1040 / 1040 Solar) or `EdgeCam-edge1050.prg`.
 2. Connect the Edge to a computer over USB.
