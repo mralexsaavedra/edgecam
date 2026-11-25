@@ -50,6 +50,8 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
     hidden var _namesSeen = [];
     hidden var _keysSeen = [];
     hidden var _chunksWritten = 0;
+    hidden var _requestedStart = false;
+    hidden var _statusCount = 0;
     hidden var _rawLogged = 0;
 
     function initialize() {
@@ -128,8 +130,9 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
         if (!connected) {
             return;
         }
-        log(recording ? "Sending STOP" : "Sending START");
-        send(Duml.record(nextSeq(), !recording));
+        _requestedStart = !recording;
+        log(_requestedStart ? "Sending START" : "Sending STOP");
+        send(Duml.record(nextSeq(), _requestedStart));
     }
 
     // ---- BleDelegate ----
@@ -261,6 +264,10 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
         if (frame.isCommand(0x02, 0x80)) {
             var wasRecording = recording;
             recording = Duml.isRecording(frame.payload);
+            _statusCount++;
+            if (_statusCount == 1) {
+                log("Status " + Dji.toHex(frame.payload.slice(0, 4)));
+            }
             if (!connected) {
                 markConnected("status");
             }
@@ -275,6 +282,10 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
                 markConnected("connect reply");
             } else if (frame.isCommand(0x02, 0x02)) {
                 log("REC reply " + Dji.toHex(frame.payload));
+                // 00 means accepted: trust it even if the status push has not said so yet
+                if (frame.payload.size() > 0 && frame.payload[0] == 0x00) {
+                    recording = _requestedStart;
+                }
             } else {
                 noteKey("resp " + key);
             }
