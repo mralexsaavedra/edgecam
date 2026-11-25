@@ -1,4 +1,4 @@
 # Diagnostic app: full-screen log, ENTER toggles recording; also carries the R SDK code for the Osmo Action line
 project.manifest = manifest-app.xml
 base.sourcePath = source;source-app;source-rsdk
-project.typecheck = 0
+project.typecheck = 2

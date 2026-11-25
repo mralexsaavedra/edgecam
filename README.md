@@ -1,139 +1,100 @@
-# EdgeCam (prototype)
+# EdgeCam
 
-Minimal Connect IQ app to check whether a **Garmin Edge 540** can control a **DJI Osmo** camera
-(target: Osmo Nano) over Bluetooth LE, using DJI's published remote protocol.
+Control a **DJI Osmo Nano** from a **Garmin Edge**: a data field that starts and stops recording with the Lap button,
+shows the camera's battery and free storage, warns you when something goes wrong and records in the activity when
+each clip was shot.
 
-Two builds share the camera code in `source/`:
+Free and open source. **Beta**: tested with one Osmo Nano and an Edge 540, not yet on many rides.
 
-- `monkey.jungle`: the **data field** (`source-field/`). Add it to a data screen; the **Lap** button starts
-  and stops recording (Connect IQ data fields cannot read other buttons on the Edge 540). Navy: ready,
-  red: recording, amber: accept the code on the camera, grey: looking for the camera.
-- `app.jungle`: a **diagnostic app** (`source-app/`) with the state and a log on screen; ENTER toggles
-  recording. It also carries the R SDK code for the Osmo Action line (`source-rsdk/`).
+[Leer en español](README.es.md)
 
-Alerts (full screen, the Edge's own alert): recording stopped by the camera (not by Lap or the auto stop),
-camera lost while recording, camera not responding while recording, camera battery at 20 % and 10 %
-(estimated) and storage below 2 GB. The rider has to allow this field's alerts in the activity profile's
-alert settings. While recording, if the camera sends no status for 5 s the field turns amber with "No signal"
-instead of counting on. Texts are in English and Spanish, following the Edge's language.
+## What you need
 
-Pauses: the field keeps the camera as it was at traffic lights, but if the activity stays paused (auto-pause or the
-Start button) longer than a set time it stops the camera, and it always stops it when the activity is saved or
-discarded. The time is a field setting in the Garmin Connect app: never, 1, 2 (default), 5 or 10 minutes. While
-paused, Lap does not reach the field, so recording is started again with Lap once moving.
+- A **DJI Osmo Nano**. Other DJI cameras are not tested.
+- A **Garmin Edge 540 / 540 Solar**, the tested one. It is also built for the Edge 840, 550, 850, 1040 and 1050, only
+  tried in the simulator on those.
 
-The data field also writes to the activity's FIT file, so each clip can be placed on the route: per second
-`camera_recording` (0/1) and `camera_clip` (clip number, 0 when not recording), and `camera_clips` (total) in the
-session summary. Garmin Connect shows them as charts. Start and stop also mark laps.
+## Install
 
-Not available on the Nano: GPS in the video and highlight markers (the camera answers `e0`, not supported,
-to the GPS `00/17` and `00/53` and key-report `00/11` commands; DJI lists neither feature for the Nano).
+For now it is installed by hand: it is not in the Connect IQ Store yet.
 
-## How it talks to the Nano
+1. Download `EDGECAMF.PRG` from the [releases page](../../releases/latest).
+2. Connect the Edge to a computer over USB.
+   - On Windows it shows up as a device.
+   - On a Mac you need an MTP tool such as [OpenMTP](https://openmtp.ganeshrvel.com/).
+3. Copy `EDGECAMF.PRG` into `Garmin/Apps/` on the Edge.
+4. Unplug the Edge. The field is listed with the Connect IQ fields.
 
-The Osmo Nano ignores DJI's documented remote protocol (R SDK, frames starting with `0xAA`).
-It speaks **DUML** (frames starting with `0x55`), DJI's internal protocol, over the same `FFF0` service:
-`FFF5` to write, `FFF4` for notifications.
+## Set up
 
-The session in `source/CameraLink.mc` mirrors a Bluetooth capture of a working iOS remote:
+1. **Add the field** to a data screen: *Activity Profiles → your profile → Data Screens → pick a field → Connect IQ →
+   EdgeCam*. The bigger the slot, the easier it is to read.
+2. **Allow its alerts**: in the same profile, *Alerts* → enable the Connect IQ / EdgeCam alerts. Without this the
+   field cannot warn you.
+3. **Pair the camera**: close DJI Mimo (and any other app using the camera) on your phone, switch the Nano on and go
+   to the field's screen. The field turns amber with a **4-digit code** and the Nano shows a "Connection request" with
+   the same code: tap **Accept**. Only the first time.
 
-1. Enable notifications on `FFF3`, `FFF4`, `FFF5`, `FFF7`.
-2. Send `00/2B 04 00` (hello) and `07/45` (connect: a 32-char remote id and a short name).
-3. Send `00/2B 01 01` every second (keep-alive).
-4. Answer the camera's `00/81` request with a fixed payload and echo its `00/74` request.
-5. Record with `02/02 01`, stop with `02/02 00` (to the camera, address `0x01`).
-6. The camera pushes `02/80` status twice a second; bit 7 of the first byte is set while recording.
+## Use
 
-On the Edge 540 the Nano is matched by its advertised name (`OsmoNano-...`): Connect IQ does not expose
-its manufacturer data or service uuid in the scan result.
+**Start the activity** and press **Lap**: the Nano starts recording. **Lap** again: it stops. Each press also marks
+a lap in the activity.
 
-Other findings from the captures:
+The colour says the state:
 
-- **Mac test bench**: `tools/nanoprobe.py` (Python + `bleak`) runs the same session from a Mac, which gets
-  full-size packets, and sends read-only queries. The Nano answers `02/70` (system state), `02/71` (storage:
-  free MB in bytes 6-9 of the reply) and `0d/02` (battery); it answers `e0` (not supported) to `02/76`, `02/59`
-  (GPS get), `02/11`, `0d/01`, `0d/03` and `0d/06`. Command names come from the community DUML dissectors in
-  [dji-firmware-tools](https://github.com/o-gs/dji-firmware-tools).
-- **What the field shows**: free storage (polled with `02/71`), an approximate battery level from the voltage
-  in the `0d/02` push (bytes 1-4; bytes 5-8 are the current, positive while charging), and the recording time
-  counted by the Edge.
-- **Camera battery**: byte 20 of the payload of the `0d/02` message the camera pushes from address `0x05`
-  (read 74 while the camera showed 74 %). The Edge cannot read it: Connect IQ only delivers the first 20 bytes
-  of each notification (11-byte header + 9 payload bytes). It would need a query with a short reply.
-- **DJI Mimo** only uses Bluetooth to switch on the camera's Wi-Fi (`07/48`) and read its network name and
-  password (`07/07`, `07/0e`); recording, battery and the rest go over Wi-Fi, which Connect IQ cannot use.
-- No GPS or highlight-marker commands have been seen over Bluetooth yet.
+| Colour | Means |
+|---|---|
+| Navy | Ready, with the camera's battery and free storage |
+| Red | Recording, with the counter and a blinking tally dot |
+| Amber | Something to do: accept the code on the camera, waiting for the camera to confirm (*REC…* / *STOP…*), or the camera is not responding (*No signal*) |
+| Light grey | Looking for or connecting to the camera |
 
-The R SDK code for the Osmo Action line (`source/DjiProtocol.mc`) is kept for later.
+Full-screen **alerts** (if allowed):
 
-## Build
+- Recording stopped: the camera stopped without you stopping it, because of heat, full storage or its own button.
+- Camera lost while recording, or camera not responding.
+- Camera battery at 20 % and 10 %.
+- Camera storage almost full (less than 2 GB).
 
-1. Install the [Connect IQ SDK](https://developer.garmin.com/connect-iq/sdk/) with the SDK Manager and
-   download the **Edge 540** device.
-2. Install the **Monkey C** extension for VS Code, then run *Monkey C: Generate a Developer Key* once.
-3. Build:
+**Stops**: with auto-pause, traffic lights leave the camera as it was. If the activity stays paused for **more than
+2 minutes**, the field stops the camera, and it always stops it when the activity is saved or discarded. Change the
+time in the **Garmin Connect** app (your Edge → Connect IQ → EdgeCam → Settings): never, 1, 2, 5 or 10 minutes.
 
-   ```sh
-   monkeyc -d edge540 -f monkey.jungle -o bin/edgecam-field.prg -y /path/to/developer_key.der
-   monkeyc -d edge540 -f app.jungle -o bin/edgecam-app.prg -y /path/to/developer_key.der
-   ```
+**Finding each video on the route**: the field records in the activity, every second, whether the camera was
+recording and which clip it was. Garmin Connect shows them as *Camera recording* and *Camera clip* charts; clip 3 is
+the third recorded stretch.
 
-4. Unit tests (protocol frames against DJI's reference bytes), in the simulator:
+## Limits
 
-   ```sh
-   monkeyc -d edge540 -f monkey.jungle -o bin/edgecam-test.prg -y /path/to/developer_key.der --unit-test
-   connectiq &
-   monkeydo bin/edgecam-test.prg edge540 -t
-   ```
+- **Lap only reaches the field while the activity runs**: not before starting it, not while paused. At a stop, use
+  the Nano's button.
+- **The battery is an estimate** from the camera's voltage (the exact percentage does not reach the Edge). It can be
+  a few points off, especially while recording.
+- **No GPS in the video and no highlight markers**: the Nano does not support them.
+- DJI publishes no remote protocol for the Nano. EdgeCam uses one worked out by watching another app, and a camera
+  update could break it.
 
-The simulator cannot talk to the camera: the Bluetooth part only runs on the real Edge.
+## Privacy
 
-## Install on the Edge 540
+EdgeCam does not use the internet or send anything anywhere: everything stays between your Edge and your camera. It
+stores a random identifier on the Edge so the camera recognises it. The recording data goes into the activity file,
+so it travels with it if you upload it to Garmin Connect, Strava, etc.
 
-From the command line (macOS, `brew install libmtp`): `tools/mtpsend.c` copies a file into a folder of the Edge by
-folder id, because `mtp-sendfile` cannot resolve Garmin's folder paths. Build it with
-`cc -o mtpsend tools/mtpsend.c $(pkg-config --cflags --libs libmtp)`, find the `Apps` folder id with `mtp-folders`,
-delete an older copy still in `Apps` with `mtp-delfile -n <id>` (the Edge refuses a second file with the same name),
-then run `./mtpsend bin/edgecam-field.prg EDGECAMF.PRG <apps id>`.
+## Troubleshooting
 
-Or with a file manager:
+- **Stuck on "Looking for camera"**: the Nano must be on, with its screen awake, and no other app connected to it.
+- **No alerts**: allow them in the profile's alerts (see *Set up*).
+- **To report a problem**, open an issue with your Edge model, the Nano's firmware version and what happened.
 
-Connect the Edge over USB (on macOS use [OpenMTP](https://openmtp.ganeshrvel.com/)) and copy
-`bin/edgecam.prg` into `Garmin/Apps/`. Unplug; the app shows up under Connect IQ apps.
-
-## Test run
-
-1. Close DJI Mimo and Multicam on the phone so nothing else is connected to the camera.
-2. Turn the camera on, open EdgeCam on the Edge.
-3. It scans, connects and shows `Check camera: code NNNN`. Accept on the camera if it asks.
-4. When it shows `READY`, press **ENTER** to start recording, again to stop.
-5. If the link drops, press **ENTER** to scan again.
-
-Write down what the screen shows at each step, especially:
-
-- `Adv ...`: the advert bytes;
-- `Model 0x....`: the model id the camera reports (unknown for the Nano so far);
-- the log lines at the bottom (write status, replies, errors).
-
-Logs also go to `Garmin/Apps/Logs/EDGECAM.TXT` if you create that empty file before running.
-
-## Known risks
-
-- Connect IQ writes at most 20 bytes per write, so frames (the connection request is 51 bytes) are sent
-  in chunks. The camera should rebuild them, but that is unproven on the Nano.
-- `FFF5` is write-without-response; if the Edge never calls back after such writes, a 1 s watchdog
-  moves on to the next chunk.
-
-## Big text font
-
-Connect IQ's system text fonts stop at `FONT_LARGE`, so the field carries its own big font for the words it
-shows (REC, STOP, BUSY, CAM, PAIR): Barlow Condensed Bold, built into bitmap fonts by `tools/mkfont.py`
-(`resources-field/fonts/`). Barlow is under the SIL Open Font License 1.1, see `licenses/OFL-BarlowCondensed.txt`.
+For developers: [how it is built](docs/DEVELOPMENT.md) and [what is known about the protocol](docs/PROTOCOL.md).
 
 ## Credits and license
 
-The protocol code is ported from [BiciCAM](https://github.com/apradoperez/bicicam) (MIT, BiciLAB Factory SL,
-based on Horst Tellioglu's Kamerad), which follows DJI's
-[Osmo-GPS-Controller-Demo](https://github.com/dji-sdk/Osmo-GPS-Controller-Demo). MIT license, see `LICENSE`.
+Started from [BiciCAM](https://github.com/apradoperez/bicicam) (BiciLAB Factory SL), itself based on Horst
+Tellioglu's Kamerad. Command names come from [dji-firmware-tools](https://github.com/o-gs/dji-firmware-tools). The
+big font is Barlow Condensed (SIL Open Font License 1.1).
 
-DJI and Osmo are trademarks of their owners. Not affiliated with or endorsed by DJI or Garmin.
+[MIT license](LICENSE). Provided without warranty.
+
+DJI and Osmo are trademarks of their owners, as are Garmin and Edge. EdgeCam is not affiliated with or endorsed by
+DJI or Garmin.

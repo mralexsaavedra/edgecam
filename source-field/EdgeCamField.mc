@@ -78,14 +78,7 @@ class EdgeCamField extends WatchUi.DataField {
         _clipsField.setData(0);
     }
 
-    hidden var _memLogged = false;
-
     function compute(info) {
-        if (!_memLogged) {
-            _memLogged = true;
-            var stats = System.getSystemStats();
-            System.println("Memory used " + stats.usedMemory + " of " + stats.totalMemory);
-        }
         _link.tick();
         announce();
         if (!_autoStopped && AutoStop.due(_pausedSince, System.getTimer(), autoStopMinutes(), _link.recording)) {

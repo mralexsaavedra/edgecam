@@ -254,7 +254,7 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
         if (!_scanning) {
             return;
         }
-        var r = results.next();
+        var r = results.next() as BluetoothLowEnergy.ScanResult?;
         while (r != null) {
             // On the Edge 540 the Nano is only recognised by its advertised name: the
             // manufacturer data and the FFF0 service uuid are not exposed in the scan result.
@@ -263,7 +263,7 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
                 onCameraFound(r, name);
                 return;
             }
-            r = results.next();
+            r = results.next() as BluetoothLowEnergy.ScanResult?;
         }
     }
 
