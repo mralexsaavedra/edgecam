@@ -22,20 +22,20 @@ function batteryFrame(mv, ma) {
 (:test)
 function linkAnnouncesRecordingStoppedByTheCamera(logger) {
     var link = new CameraLink();
-    link.onCharacteristicChanged(null, statusFrame(0x81));
+    link.feed(statusFrame(0x81));
     var wasRecording = link.recording;
-    link.onCharacteristicChanged(null, statusFrame(0xC1));
+    link.feed(statusFrame(0xC1));
     return wasRecording && !link.recording && link.takeEvent() == :stopped && link.takeEvent() == null;
 }
 
 (:test)
 function linkAnnouncesLowBatteryOnceAt20AndAt10(logger) {
     var link = new CameraLink();
-    link.onCharacteristicChanged(null, batteryFrame(3670, -150));
+    link.feed(batteryFrame(3670, -150));
     var at20 = link.takeEvent();
-    link.onCharacteristicChanged(null, batteryFrame(3665, -150));
+    link.feed(batteryFrame(3665, -150));
     var again = link.takeEvent();
-    link.onCharacteristicChanged(null, batteryFrame(3560, -150));
+    link.feed(batteryFrame(3560, -150));
     var at10 = link.takeEvent();
     return at20 == :battery20 && again == null && at10 == :battery10;
 }
@@ -43,6 +43,6 @@ function linkAnnouncesLowBatteryOnceAt20AndAt10(logger) {
 (:test)
 function linkStaysQuietWhileCharging(logger) {
     var link = new CameraLink();
-    link.onCharacteristicChanged(null, batteryFrame(3560, 400));
+    link.feed(batteryFrame(3560, 400));
     return link.takeEvent() == null && link.charging();
 }

@@ -318,6 +318,11 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
     }
 
     function onCharacteristicChanged(characteristic, value) {
+        feed(value);
+    }
+
+    // Handles one notification from the camera (public so tests can feed captured frames)
+    function feed(value) {
         var frames = Duml.parseNotification(value);
         for (var i = 0; i < frames.size(); i++) {
             handleFrame(frames[i]);
