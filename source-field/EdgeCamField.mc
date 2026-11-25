@@ -127,12 +127,17 @@ class EdgeCamField extends WatchUi.DataField {
             return;
         }
 
-        var battery = _link.charging() ? "CHG" : (_link.batteryPercent() != null ? "~" + _link.batteryPercent() + "%" : "--%");
-        var storage = _link.storageText() != null ? _link.storageText() : "--";
-        var batteryColor = colorForBattery(_link.charging() ? null : _link.batteryPercent(), background);
+        // Value in a big number font, unit small beside it, as Garmin's own data fields do
+        var percent = _link.batteryPercent();
+        var batteryValue = _link.charging() ? "CHG" : (percent != null ? percent.toString() : "--");
+        var batteryUnit = _link.charging() ? "" : "%";
+        var mb = _link.freeMb;
+        var storageValue = mb == null ? "--" : (mb >= 1024 ? (mb / 1024).toString() : mb.toString());
+        var storageUnit = mb != null && mb < 1024 ? "MB" : "GB";
+        var batteryColor = colorForBattery(_link.charging() ? null : percent, background);
         var mainRow = [:main, main, ink, dot];
-        var batteryRow = [:icon, battery, batteryColor, :battery, _link.batteryPercent()];
-        var storageRow = [:icon, storage, ink, :card, null];
+        var batteryRow = [:icon, batteryValue, batteryColor, :battery, percent, batteryUnit];
+        var storageRow = [:icon, storageValue, ink, :card, null, storageUnit];
 
         if (h > w * 3 / 4) {
             // Tall slot: three rows
@@ -159,7 +164,7 @@ class EdgeCamField extends WatchUi.DataField {
             if (r[0] == :main) {
                 font = fit(dc, r[1], fontsFor(r[1]), w - 8, maxH * 80 / 100);
             } else if (r[0] == :icon) {
-                font = fit(dc, r[1], fontsFor(r[1]), (w - 8) * 60 / 100, maxH);
+                font = fit(dc, r[1], fontsFor(r[1]), (w - 8) * 50 / 100, maxH);
             } else {
                 font = fit(dc, r[1], r[3] ? fontsFor(r[1]) : [Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY, Graphics.FONT_XTINY], w - 8, maxH);
             }
@@ -191,8 +196,8 @@ class EdgeCamField extends WatchUi.DataField {
     }
 
     hidden function dotRadius(textH) {
-        var r = textH / 9;
-        return r < 4 ? 4 : r;
+        var r = textH / 4;
+        return r < 6 ? 6 : r;
     }
 
     hidden function dotGap(textH) {
@@ -215,21 +220,27 @@ class EdgeCamField extends WatchUi.DataField {
             }
             dc.drawText(x + w / 2, top + r * 2 + dotGap(th), font, row[1], Graphics.TEXT_JUSTIFY_CENTER);
         } else if (row[0] == :icon) {
-            drawWithIcon(dc, x, top, w, th, row[1], row[2], row[3], row[4], font);
+            drawWithIcon(dc, x, top, w, th, row[1], row[2], row[3], row[4], font, row[5]);
         } else {
             dc.setColor(row[2], Graphics.COLOR_TRANSPARENT);
             dc.drawText(x + w / 2, top, font, row[1], Graphics.TEXT_JUSTIFY_CENTER);
         }
     }
 
-    // A value with a small battery or card drawing in front, sized to the text and centred in its box
-    hidden function drawWithIcon(dc, x, y, w, h, text, color, icon, level, font) {
-        var iconH = h * 55 / 100;
+    // A value with a battery or card drawing in front and a small unit behind, centred in its box.
+    // The drawing and the unit line up with the digits, not with the font box (number fonts carry
+    // a lot of empty space above the glyphs).
+    hidden function drawWithIcon(dc, x, y, w, h, text, color, icon, level, font, unit) {
+        var baseline = y + h - dc.getFontDescent(font);
+        var glyphH = dc.getFontAscent(font) * 3 / 4;
+        var unitFont = Graphics.FONT_SMALL;
+        var unitW = unit.length() > 0 ? dc.getTextWidthInPixels(unit, unitFont) + 2 : 0;
+        var iconH = glyphH * 3 / 4;
         var iconW = icon == :battery ? iconH * 7 / 4 : iconH * 3 / 4;
         var gap = iconH / 2;
         var tw = dc.getTextWidthInPixels(text, font);
-        var left = x + (w - iconW - gap - tw) / 2;
-        var iy = y + (h - iconH) / 2;
+        var left = x + (w - iconW - gap - tw - unitW) / 2;
+        var iy = baseline - glyphH + (glyphH - iconH) / 2;
         dc.setColor(color, Graphics.COLOR_TRANSPARENT);
         dc.setPenWidth(2);
         if (icon == :battery) {
@@ -251,7 +262,13 @@ class EdgeCamField extends WatchUi.DataField {
             dc.drawLine(left, iy + c, left + c, iy);
         }
         dc.setPenWidth(1);
-        dc.drawText(left + iconW + gap, y, font, text, Graphics.TEXT_JUSTIFY_LEFT);
+        var tx = left + iconW + gap;
+        dc.drawText(tx, y, font, text, Graphics.TEXT_JUSTIFY_LEFT);
+        if (unitW > 0) {
+            // Unit sits on the same baseline as the digits
+            var unitTop = baseline - dc.getFontAscent(unitFont);
+            dc.drawText(tx + tw + 2, unitTop, unitFont, unit, Graphics.TEXT_JUSTIFY_LEFT);
+        }
     }
 
     // Battery colour as in BiciCAM: green from 30 %, yellow 15-29 %, red below; on the red background
