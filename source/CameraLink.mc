@@ -21,7 +21,6 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
     const LOG_LINES = 10;
     const TICK_MS = 250;
     const KEEPALIVE_TICKS = 4;
-    const NAME = "EDGE";
 
     // What the screen shows
     var state = "Starting";
@@ -50,6 +49,8 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
     hidden var _advertsSeen = 0;
     hidden var _namesSeen = [];
     hidden var _keysSeen = [];
+    hidden var _chunksWritten = 0;
+    hidden var _rawLogged = 0;
 
     function initialize() {
         BleDelegate.initialize();
@@ -205,13 +206,23 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
 
     function onCharacteristicWrite(characteristic, status) {
         _busy = false;
+        _chunksWritten++;
         if (status != BluetoothLowEnergy.STATUS_SUCCESS) {
             log("Write status " + status);
+        }
+        // The hello and connect frames take 4 chunks: report once they are out
+        if (_chunksWritten == 4) {
+            log("4 chunks written");
         }
         pump();
     }
 
     function onCharacteristicChanged(characteristic, value) {
+        if (_rawLogged < 4) {
+            _rawLogged++;
+            var hex = Dji.toHex(value);
+            log("rx raw " + (hex.length() > 22 ? hex.substring(0, 22) : hex));
+        }
         var frames = _assembler.feed(value);
         for (var i = 0; i < frames.size(); i++) {
             handleFrame(frames[i]);
@@ -235,12 +246,14 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
         }
     }
 
+    // The camera shows the 4-char name as the verification code on its screen
     hidden function startSession() {
         _sessionStarted = true;
-        state = "Session: waiting for camera";
-        log("Hello + connect as " + NAME);
+        verifyCode = 1000 + Math.rand() % 9000;
+        state = "Accept " + verifyCode + " on camera";
+        log("Hello + connect, code " + verifyCode);
         send(Duml.hello(nextSeq()));
-        send(Duml.connect(nextSeq(), _remoteId, NAME));
+        send(Duml.connect(nextSeq(), _remoteId, verifyCode.toString()));
     }
 
     hidden function handleFrame(frame) {
@@ -379,6 +392,8 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
         _queue = [];
         _busy = false;
         _sessionStarted = false;
+        _chunksWritten = 0;
+        _rawLogged = 0;
         _assembler = new Duml.Assembler();
     }
 
