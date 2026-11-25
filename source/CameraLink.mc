@@ -48,6 +48,11 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
     var batteryMa = null;
     var freeMb = null;
     var recordingSince = null;
+    // A start or stop sent and not answered yet (:start / :stop), for feedback on the screen
+    var pending = null;
+    // Short message when the camera refused a command, shown until refusedUntil
+    var refused = null;
+    var refusedUntil = 0;
 
     hidden var _device = null;
     hidden var _write = null;
@@ -65,6 +70,7 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
     hidden var _statusHoldUntil = 0;
     hidden var _keysSeen = [];
     hidden var _lastStoragePoll = 0;
+    hidden var _pendingSince = 0;
 
     function initialize() {
         BleDelegate.initialize();
@@ -140,6 +146,8 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
             return;
         }
         _requestedStart = !recording;
+        pending = _requestedStart ? :start : :stop;
+        _pendingSince = System.getTimer();
         log(_requestedStart ? "Sending START" : "Sending STOP");
         send(Duml.record(nextSeq(), _requestedStart));
     }
@@ -156,6 +164,11 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
             log("No write callback, continuing");
             _busy = false;
             pump();
+        }
+        // No answer in 3 s: drop the "waiting" state, the status push says what really happened
+        if (pending != null && now - _pendingSince > 3000) {
+            log("No REC reply");
+            pending = null;
         }
         if (connected && (_lastStoragePoll == 0 || now - _lastStoragePoll >= STORAGE_POLL_MS)) {
             _lastStoragePoll = now;
@@ -315,6 +328,11 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
                 markConnected();
             } else if (frame.isCommand(0x02, 0x02)) {
                 log("REC reply " + Duml.toHex(frame.payload));
+                pending = null;
+                if (frame.payload.size() > 0 && frame.payload[0] != 0x00) {
+                    refused = "Camera busy";
+                    refusedUntil = System.getTimer() + 3000;
+                }
                 // 00 means accepted: trust it until the status push catches up
                 if (frame.payload.size() > 0 && frame.payload[0] == 0x00) {
                     var wasRecording = recording;
@@ -447,6 +465,7 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
         _statusHoldUntil = 0;
         _lastStoragePoll = 0;
         recordingSince = null;
+        pending = null;
     }
 
     // Logs each new kind of camera message once

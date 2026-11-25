@@ -6,6 +6,7 @@ import Toybox.Application;
 import Toybox.FitContributor;
 import Toybox.Graphics;
 import Toybox.Lang;
+import Toybox.System;
 import Toybox.WatchUi;
 
 class EdgeCamFieldApp extends Application.AppBase {
@@ -88,8 +89,18 @@ class EdgeCamField extends WatchUi.DataField {
         var sub = _link.state;
         var showData = false;
         var dot = false;
+        var now = System.getTimer();
 
-        if (_link.recording) {
+        if (_link.pending != null) {
+            // Sent, waiting for the camera to confirm: amber, as BiciCAM does for "wait"
+            background = AMBER;
+            main = _link.pending == :start ? "REC..." : "STOP...";
+            sub = "Waiting for camera";
+        } else if (_link.refused != null && now < _link.refusedUntil) {
+            background = AMBER;
+            main = "BUSY";
+            sub = _link.refused;
+        } else if (_link.recording) {
             background = RED;
             var secs = _link.recordingSeconds();
             main = secs != null ? (secs / 60).format("%02d") + ":" + (secs % 60).format("%02d") : "REC";
@@ -112,77 +123,120 @@ class EdgeCamField extends WatchUi.DataField {
         dc.clear();
 
         if (!showData) {
-            // Main word or code on top, what to do underneath
-            drawText(dc, 0, 0, w, h * 2 / 3, main, ink, true);
-            drawText(dc, 0, h * 2 / 3, w, h / 3, sub, ink, false);
+            layoutColumn(dc, 0, 0, w, h, [[:text, main, ink, true], [:text, sub, ink, false]]);
             return;
         }
 
         var battery = _link.charging() ? "CHG" : (_link.batteryPercent() != null ? "~" + _link.batteryPercent() + "%" : "--%");
         var storage = _link.storageText() != null ? _link.storageText() : "--";
         var batteryColor = colorForBattery(_link.charging() ? null : _link.batteryPercent(), background);
+        var mainRow = [:main, main, ink, dot];
+        var batteryRow = [:icon, battery, batteryColor, :battery, _link.batteryPercent()];
+        var storageRow = [:icon, storage, ink, :card, null];
 
-        if (w > h * 2) {
-            // Wide slot: REC on the left, battery over storage on the right
-            drawMain(dc, 0, 0, w / 2, h, main, dot, ink);
-            drawWithIcon(dc, w / 2, 0, w / 2, h / 2, battery, batteryColor, :battery, _link.batteryPercent());
-            drawWithIcon(dc, w / 2, h / 2, w / 2, h / 2, storage, ink, :card, null);
-        } else if (h > w * 3 / 4) {
+        if (h > w * 3 / 4) {
             // Tall slot: three rows
-            drawMain(dc, 0, 0, w, h / 2, main, dot, ink);
-            drawWithIcon(dc, 0, h / 2, w, h / 4, battery, batteryColor, :battery, _link.batteryPercent());
-            drawWithIcon(dc, 0, h * 3 / 4, w, h / 4, storage, ink, :card, null);
+            layoutColumn(dc, 0, 0, w, h, [mainRow, batteryRow, storageRow]);
         } else {
-            // Normal slot: REC on the left, battery over storage on the right, like BiciCAM
-            drawMain(dc, 0, 0, w * 3 / 5, h, main, dot, ink);
-            drawWithIcon(dc, w * 3 / 5, 0, w * 2 / 5, h / 2, battery, batteryColor, :battery, _link.batteryPercent());
-            drawWithIcon(dc, w * 3 / 5, h / 2, w * 2 / 5, h / 2, storage, ink, :card, null);
+            // Normal or wide slot: REC on the left, battery over storage on the right, like BiciCAM
+            var split = w > h * 2 ? w / 2 : w * 3 / 5;
+            layoutColumn(dc, 0, 0, split, h, [mainRow]);
+            layoutColumn(dc, split, 0, w - split, h, [batteryRow, storageRow]);
         }
     }
 
-    // The big value (REC or the counter) with the tally dot above it
-    hidden function drawMain(dc, x, y, w, h, text, dot, ink) {
-        var dotR = h / 14;
-        if (dotR < 3) {
-            dotR = 3;
+    // Stacks rows in a box: the first row may take up to 55 % of the height, the rest share what is
+    // left, each row keeps only the height of its font, and the spare height is spread evenly.
+    hidden function layoutColumn(dc, x, y, w, h, rows) {
+        var n = rows.size();
+        var fonts = new [n];
+        var heights = new [n];
+        var used = 0;
+        for (var i = 0; i < n; i++) {
+            var maxH = n == 1 ? h : (i == 0 ? h * 55 / 100 : (h * 45 / 100) / (n - 1));
+            var r = rows[i];
+            var font = null;
+            if (r[0] == :main) {
+                font = fit(dc, r[1], fontsFor(r[1]), w - 8, maxH * 80 / 100);
+            } else if (r[0] == :icon) {
+                font = fit(dc, r[1], fontsFor(r[1]), (w - 8) * 60 / 100, maxH);
+            } else {
+                font = fit(dc, r[1], r[3] ? fontsFor(r[1]) : [Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY, Graphics.FONT_XTINY], w - 8, maxH);
+            }
+            if (font == null) {
+                font = Graphics.FONT_XTINY;
+            }
+            fonts[i] = font;
+            heights[i] = rowHeight(dc, r, font);
+            used += heights[i];
         }
-        var dotSpace = dotR * 2 + 4;
-        var font = fit(dc, text, fontsFor(text), w - 8, h - dotSpace);
-        if (font == null) {
-            font = Graphics.FONT_XTINY;
+        var gap = (h - used) / (n + 1);
+        if (gap < 0) {
+            gap = 0;
         }
+        var top = y + gap;
+        for (var i = 0; i < n; i++) {
+            drawRow(dc, x, top, w, rows[i], fonts[i]);
+            top += heights[i] + gap;
+        }
+    }
+
+    // The main row adds the tally dot above the text, with a clear gap between them
+    hidden function rowHeight(dc, row, font) {
         var th = dc.getFontHeight(font);
-        var top = y + (h - th - dotSpace) / 2;
-        // Filled dot: recording (blinking); ring: ready
-        dc.setColor(ink, Graphics.COLOR_TRANSPARENT);
-        if (dot) {
-            dc.fillCircle(x + w / 2, top + dotR, dotR);
-        } else {
-            dc.setPenWidth(2);
-            dc.drawCircle(x + w / 2, top + dotR, dotR);
-            dc.setPenWidth(1);
+        if (row[0] == :main) {
+            return th + dotRadius(th) * 2 + dotGap(th);
         }
-        dc.drawText(x + w / 2, top + dotSpace, font, text, Graphics.TEXT_JUSTIFY_CENTER);
+        return th;
     }
 
-    // A value with a small battery or card drawing in front, centred in its box
-    hidden function drawWithIcon(dc, x, y, w, h, text, color, icon, level) {
-        var iconH = h * 3 / 5;
-        var iconW = icon == :battery ? iconH * 2 : iconH * 3 / 4;
-        var gap = iconH / 3;
-        var font = fit(dc, text, fontsFor(text), w - iconW - gap - 8, h - 2);
-        if (font == null) {
-            font = Graphics.FONT_XTINY;
+    hidden function dotRadius(textH) {
+        var r = textH / 9;
+        return r < 4 ? 4 : r;
+    }
+
+    hidden function dotGap(textH) {
+        var g = textH / 5;
+        return g < 6 ? 6 : g;
+    }
+
+    hidden function drawRow(dc, x, top, w, row, font) {
+        var th = dc.getFontHeight(font);
+        if (row[0] == :main) {
+            var r = dotRadius(th);
+            dc.setColor(row[2], Graphics.COLOR_TRANSPARENT);
+            // Filled dot: recording (blinking); ring: ready
+            if (row[3]) {
+                dc.fillCircle(x + w / 2, top + r, r);
+            } else {
+                dc.setPenWidth(2);
+                dc.drawCircle(x + w / 2, top + r, r);
+                dc.setPenWidth(1);
+            }
+            dc.drawText(x + w / 2, top + r * 2 + dotGap(th), font, row[1], Graphics.TEXT_JUSTIFY_CENTER);
+        } else if (row[0] == :icon) {
+            drawWithIcon(dc, x, top, w, th, row[1], row[2], row[3], row[4], font);
+        } else {
+            dc.setColor(row[2], Graphics.COLOR_TRANSPARENT);
+            dc.drawText(x + w / 2, top, font, row[1], Graphics.TEXT_JUSTIFY_CENTER);
         }
+    }
+
+    // A value with a small battery or card drawing in front, sized to the text and centred in its box
+    hidden function drawWithIcon(dc, x, y, w, h, text, color, icon, level, font) {
+        var iconH = h * 55 / 100;
+        var iconW = icon == :battery ? iconH * 7 / 4 : iconH * 3 / 4;
+        var gap = iconH / 2;
         var tw = dc.getTextWidthInPixels(text, font);
         var left = x + (w - iconW - gap - tw) / 2;
         var iy = y + (h - iconH) / 2;
         dc.setColor(color, Graphics.COLOR_TRANSPARENT);
         dc.setPenWidth(2);
         if (icon == :battery) {
-            var bodyW = iconW - iconH / 5;
+            var nub = iconH / 6 + 1;
+            var bodyW = iconW - nub;
             dc.drawRectangle(left, iy, bodyW, iconH);
-            dc.fillRectangle(left + bodyW, iy + iconH / 3, iconH / 5, iconH / 3);
+            dc.fillRectangle(left + bodyW, iy + iconH / 3, nub, iconH / 3);
             if (level != null) {
                 var fillW = (bodyW - 6) * (level > 100 ? 100 : level) / 100;
                 dc.fillRectangle(left + 3, iy + 3, fillW, iconH - 6);
@@ -197,17 +251,7 @@ class EdgeCamField extends WatchUi.DataField {
             dc.drawLine(left, iy + c, left + c, iy);
         }
         dc.setPenWidth(1);
-        dc.drawText(left + iconW + gap, y + (h - dc.getFontHeight(font)) / 2, font, text, Graphics.TEXT_JUSTIFY_LEFT);
-    }
-
-    hidden function drawText(dc, x, y, w, h, text, color, big) {
-        var fonts = big ? fontsFor(text) : [Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY, Graphics.FONT_XTINY];
-        var font = fit(dc, text, fonts, w - 8, h);
-        if (font == null) {
-            font = Graphics.FONT_XTINY;
-        }
-        dc.setColor(color, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(x + w / 2, y + (h - dc.getFontHeight(font)) / 2, font, text, Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(left + iconW + gap, y, font, text, Graphics.TEXT_JUSTIFY_LEFT);
     }
 
     // Battery colour as in BiciCAM: green from 30 %, yellow 15-29 %, red below; on the red background
