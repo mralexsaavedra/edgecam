@@ -50,6 +50,7 @@ class EdgeCamField extends WatchUi.DataField {
     hidden var _clips = 0;
     hidden var _wasRecording = false;
     hidden var _background = 0;
+    hidden var _fieldH = 0;
     // Big text font built by tools/mkfont.py (Barlow Condensed Bold, only the letters below): the
     // system text fonts stop at FONT_LARGE, which left REC smaller than the numbers
     const BIG_GLYPHS = "RECSTOPBUSYAMI.";
@@ -137,6 +138,7 @@ class EdgeCamField extends WatchUi.DataField {
         }
         var ink = (background == GREY || background == AMBER) ? NAVY : WHITE;
         _background = background;
+        _fieldH = h;
         dc.setColor(ink, background);
         dc.clear();
 
@@ -181,7 +183,8 @@ class EdgeCamField extends WatchUi.DataField {
             var r = rows[i];
             var font = null;
             if (r[0] == :main) {
-                font = fit(dc, r[1], fontsFor(r[1]), w - 8, maxH * 80 / 100);
+                // Leave room for the tally dot and its gap above the text
+                font = fit(dc, r[1], fontsFor(r[1]), w - 8, maxH - dotSpace(h));
             } else if (r[0] == :icon) {
                 font = fit(dc, r[1], fontsFor(r[1]), (w - 8) * 50 / 100, maxH);
             } else {
@@ -208,26 +211,23 @@ class EdgeCamField extends WatchUi.DataField {
     // The main row adds the tally dot above the text, with a clear gap between them
     hidden function rowHeight(dc, row, font) {
         var th = dc.getFontHeight(font);
-        if (row[0] == :main) {
-            return th + dotRadius(th) * 2 + dotGap(th);
-        }
-        return th;
+        return row[0] == :main ? th + dotSpace(_fieldH) : th;
     }
 
-    hidden function dotRadius(textH) {
-        var r = textH / 4;
-        return r < 6 ? 6 : r;
+    // Tally dot sized to the field, not to the font: 1/28 of the height, between 5 and 12 px
+    hidden function dotRadius(fieldH) {
+        var r = fieldH / 28;
+        return r < 5 ? 5 : (r > 12 ? 12 : r);
     }
 
-    hidden function dotGap(textH) {
-        var g = textH / 5;
-        return g < 6 ? 6 : g;
+    hidden function dotSpace(fieldH) {
+        return dotRadius(fieldH) * 3;
     }
 
     hidden function drawRow(dc, x, top, w, row, font) {
         var th = dc.getFontHeight(font);
         if (row[0] == :main) {
-            var r = dotRadius(th);
+            var r = dotRadius(_fieldH);
             dc.setColor(row[2], Graphics.COLOR_TRANSPARENT);
             // Filled dot: recording (blinking); ring: ready
             if (row[3]) {
@@ -237,7 +237,7 @@ class EdgeCamField extends WatchUi.DataField {
                 dc.drawCircle(x + w / 2, top + r, r);
                 dc.setPenWidth(1);
             }
-            dc.drawText(x + w / 2, top + r * 2 + dotGap(th), font, row[1], Graphics.TEXT_JUSTIFY_CENTER);
+            dc.drawText(x + w / 2, top + dotSpace(_fieldH), font, row[1], Graphics.TEXT_JUSTIFY_CENTER);
         } else if (row[0] == :icon) {
             drawWithIcon(dc, x, top, w, th, row[1], row[2], row[3], row[4], font, row[5]);
         } else {
