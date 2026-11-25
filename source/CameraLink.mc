@@ -1,4 +1,7 @@
-// BLE link with a DJI camera: scan, connect, handshake, status and record control.
+// BLE link with a DJI Osmo Nano over DUML: scan, connect, session, status and record control.
+// The session mirrors what a working iOS remote did in a Bluetooth capture:
+// enable notifications on FFF3/FFF4/FFF5/FFF7, send 00/2B hello, 07/45 connect, keep-alive every
+// second, answer the camera's 00/81 and 00/74 requests, and use 02/02 to start/stop recording.
 //
 // Connect IQ limits that shape this class:
 // - only one BLE request (write, descriptor write) may be outstanding at a time;
@@ -16,13 +19,15 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
     const CHUNK = 20;
     const WRITE_ACK_TIMEOUT_MS = 1000;
     const LOG_LINES = 10;
+    const TICK_MS = 250;
+    const KEEPALIVE_TICKS = 4;
+    const NAME = "EDGE";
 
     // What the screen shows
     var state = "Starting";
     var cameraName = null;
     var advertHex = null;
     var verifyCode = null;
-    var cameraDeviceId = 0l;
     var connected = false;
     var recording = false;
     var battery = null;
@@ -31,60 +36,52 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
 
     hidden var _device = null;
     hidden var _write = null;
+    hidden var _cccds = [];
     hidden var _queue = [];
     hidden var _busy = false;
     hidden var _busySince = 0;
     hidden var _seq = 0;
     hidden var _assembler;
-    hidden var _deviceId;
-    hidden var _mac;
-    hidden var _lastAckAt = 0;
+    hidden var _remoteId;
     hidden var _scanning = false;
+    hidden var _sessionStarted = false;
+    hidden var _ticks = 0;
     hidden var _timer;
     hidden var _advertsSeen = 0;
     hidden var _namesSeen = [];
+    hidden var _keysSeen = [];
 
     function initialize() {
         BleDelegate.initialize();
-        _assembler = new Dji.Assembler();
+        _assembler = new Duml.Assembler();
         _timer = new Timer.Timer();
-        loadIdentity();
         Math.srand(System.getTimer());
-        _seq = 1 + Math.rand() % 0x4000;
+        _seq = Math.rand() & 0xFFFF;
+        loadIdentity();
     }
 
-    // Identity of this remote, the same on every connection so the camera remembers it.
+    // A 32-char id for this remote, the same on every connection so the camera remembers it
     hidden function loadIdentity() {
-        var id = Application.Storage.getValue("deviceId");
-        var mac = Application.Storage.getValue("mac");
-        if (!(id instanceof Number) || !(mac instanceof Array)) {
-            Math.srand(System.getTimer());
-            id = 0x10000000 + Math.rand() % 0x6FFFFFFF;
-            mac = [];
-            for (var i = 0; i < 6; i++) {
-                mac.add(Math.rand() % 256);
+        var id = Application.Storage.getValue("dumlId");
+        if (!(id instanceof String) || id.length() != 32) {
+            id = "";
+            for (var i = 0; i < 16; i++) {
+                id += (Math.rand() % 256).format("%02x");
             }
-            mac[0] = (mac[0] & 0xFE) | 0x02; // locally administered, unicast
-            Application.Storage.setValue("deviceId", id);
-            Application.Storage.setValue("mac", mac);
+            Application.Storage.setValue("dumlId", id);
         }
-        _deviceId = id.toLong();
-        _mac = new [6]b;
-        for (var i = 0; i < 6; i++) {
-            _mac[i] = mac[i];
-        }
+        _remoteId = id;
     }
 
     function start() {
         BluetoothLowEnergy.setDelegate(self);
+        var characteristics = [];
+        var uuids = Nano.characteristicUuids();
+        for (var i = 0; i < uuids.size(); i++) {
+            characteristics.add({ :uuid => uuids[i], :descriptors => [BluetoothLowEnergy.cccdUuid()] });
+        }
         try {
-            BluetoothLowEnergy.registerProfile({
-                :uuid => Dji.serviceUuid(),
-                :characteristics => [
-                    { :uuid => Dji.notifyUuid(), :descriptors => [BluetoothLowEnergy.cccdUuid()] },
-                    { :uuid => Dji.writeUuid() }
-                ]
-            });
+            BluetoothLowEnergy.registerProfile({ :uuid => Dji.serviceUuid(), :characteristics => characteristics });
             state = "Registering BLE profile";
         } catch (e) {
             // Seen in the simulator when the app restarts in the same session: the profile is
@@ -92,7 +89,7 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
             log("registerProfile: " + e.getErrorMessage());
             startScan();
         }
-        _timer.start(method(:tick), 250, true);
+        _timer.start(method(:tick), TICK_MS, true);
     }
 
     function stop() {
@@ -121,7 +118,6 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
             _device = null;
         }
         resetLink();
-        _assembler = new Dji.Assembler();
         _scanning = true;
         state = "Scanning for DJI camera";
         BluetoothLowEnergy.setScanState(BluetoothLowEnergy.SCAN_STATE_SCANNING);
@@ -132,7 +128,7 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
             return;
         }
         log(recording ? "Sending STOP" : "Sending START");
-        send(Dji.recordControl(nextSeq(), cameraDeviceId, !recording));
+        send(Duml.record(nextSeq(), !recording));
     }
 
     // ---- BleDelegate ----
@@ -157,10 +153,9 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
             var byName = name != null && name.find("Osmo") == 0;
             var byService = advertisesDjiService(r);
             noteDevice(name, data != null, byService);
-            // Unlike BiciCAM, do not require byte 2 == 0xFA: the Osmo Nano advertises 0x80 there.
-            // Any one signal is enough: Connect IQ may not expose every advert field.
+            // On the Edge 540 the Nano is only recognised by name: the manufacturer data and the
+            // FFF0 service uuid are not exposed in the scan result.
             if (data != null || byService || byName) {
-                log("Match: mfr=" + (data != null) + " svc=" + byService + " name=" + byName);
                 onCameraFound(r, data != null ? data : []b);
                 return;
             }
@@ -182,31 +177,30 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
             fail("No FFF0 service");
             return;
         }
-        var notify = service.getCharacteristic(Dji.notifyUuid());
         _write = service.getCharacteristic(Dji.writeUuid());
-        if (notify == null || _write == null) {
-            fail("FFF4/FFF5 missing");
+        if (_write == null) {
+            fail("FFF5 missing");
             return;
         }
-        var cccd = notify.getDescriptor(BluetoothLowEnergy.cccdUuid());
-        if (cccd == null) {
-            fail("FFF4 has no CCCD");
-            return;
+        // Same order as the iOS remote: FFF3, FFF4, FFF5, FFF7
+        _cccds = [];
+        var uuids = Nano.characteristicUuids();
+        for (var i = 0; i < uuids.size(); i++) {
+            var c = service.getCharacteristic(uuids[i]);
+            var d = c != null ? c.getDescriptor(BluetoothLowEnergy.cccdUuid()) : null;
+            if (d != null) {
+                _cccds.add(d);
+            }
         }
         state = "Enabling notifications";
-        try {
-            cccd.requestWrite([0x01, 0x00]b);
-        } catch (e) {
-            fail("CCCD write failed: " + e.getErrorMessage());
-        }
+        enableNextCccd();
     }
 
     function onDescriptorWrite(descriptor, status) {
-        if (status == BluetoothLowEnergy.STATUS_SUCCESS) {
-            handshake();
-        } else {
-            fail("CCCD write status " + status);
+        if (status != BluetoothLowEnergy.STATUS_SUCCESS) {
+            log("CCCD write status " + status);
         }
+        enableNextCccd();
     }
 
     function onCharacteristicWrite(characteristic, status) {
@@ -224,7 +218,72 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
         }
     }
 
-    // ---- Protocol flow ----
+    // ---- Session ----
+
+    hidden function enableNextCccd() {
+        if (_cccds.size() == 0) {
+            startSession();
+            return;
+        }
+        var d = _cccds[0];
+        _cccds = _cccds.slice(1, null);
+        try {
+            d.requestWrite([0x01, 0x00]b);
+        } catch (e) {
+            log("CCCD write failed: " + e.getErrorMessage());
+            enableNextCccd();
+        }
+    }
+
+    hidden function startSession() {
+        _sessionStarted = true;
+        state = "Session: waiting for camera";
+        log("Hello + connect as " + NAME);
+        send(Duml.hello(nextSeq()));
+        send(Duml.connect(nextSeq(), _remoteId, NAME));
+    }
+
+    hidden function handleFrame(frame) {
+        var key = frame.key();
+        if (frame.isCommand(0x02, 0x80)) {
+            var wasRecording = recording;
+            recording = Duml.isRecording(frame.payload);
+            if (!connected) {
+                markConnected("status");
+            }
+            if (recording != wasRecording) {
+                log(recording ? "Camera RECORDING" : "Camera stopped");
+            }
+            return;
+        }
+        if (frame.isResponse()) {
+            if (frame.isCommand(0x07, 0x45)) {
+                log("Connect reply " + Dji.toHex(frame.payload));
+                markConnected("connect reply");
+            } else if (frame.isCommand(0x02, 0x02)) {
+                log("REC reply " + Dji.toHex(frame.payload));
+            } else {
+                noteKey("resp " + key);
+            }
+            return;
+        }
+        if (frame.isCommand(0x00, 0x81)) {
+            send(Duml.answer81(frame));
+        } else if (frame.isCommand(0x00, 0x74)) {
+            send(Duml.echo(frame));
+        } else {
+            noteKey(frame.src.format("%02X") + " " + key);
+        }
+    }
+
+    hidden function markConnected(reason) {
+        if (connected) {
+            return;
+        }
+        connected = true;
+        state = "Connected";
+        log("Connected (" + reason + ")");
+    }
 
     hidden function onCameraFound(result, data) {
         _scanning = false;
@@ -246,15 +305,6 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
         }
     }
 
-    // Logs each new named device once, to see what the Edge actually hears
-    hidden function noteDevice(name, hasDjiData, hasService) {
-        if (name == null || _namesSeen.indexOf(name) >= 0 || _namesSeen.size() >= 8) {
-            return;
-        }
-        _namesSeen.add(name);
-        log("Saw " + name + (hasDjiData ? " +mfr" : "") + (hasService ? " +svc" : ""));
-    }
-
     hidden function advertisesDjiService(result) {
         var service = Dji.serviceUuid();
         var uuids = result.getServiceUuids();
@@ -266,85 +316,6 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
             u = uuids.next();
         }
         return false;
-    }
-
-    // Handshake (protocol_data_segment.md, "Connection Process"): 1. remote asks to connect;
-    // 2. camera replies; 3. camera sends its own request with the verdict; 4. remote confirms it.
-    hidden function handshake() {
-        var firstPairing = Application.Storage.getValue("paired") != true;
-        verifyCode = 1000 + Math.rand() % 9000;
-        state = "Check camera: code " + verifyCode;
-        log(firstPairing ? "Pairing request sent" : "Reconnect request sent");
-        send(Dji.connectionRequest(nextSeq(), _deviceId, _mac, firstPairing ? 1 : 0, verifyCode));
-    }
-
-    hidden function handleFrame(frame) {
-        if (frame.isCommand(Dji.SET_CAMERA, Dji.STATUS_PUSH)) {
-            var s = Dji.parseStatus(frame.payload);
-            if (s != null) {
-                recording = s[:recording];
-                battery = s[:battery];
-                mode = s[:mode];
-            }
-            return;
-        }
-        if (frame.isCommand(Dji.SET_GENERAL, Dji.CONNECTION)) {
-            if (frame.isResponse()) {
-                onConnectionReply(frame);
-            } else {
-                onCameraRequest(frame);
-            }
-            return;
-        }
-        if (frame.isResponse() && frame.isCommand(Dji.SET_CAMERA, Dji.RECORD_CONTROL)) {
-            log("REC reply code " + (frame.payload.size() > 0 ? frame.payload[0] : "?"));
-            return;
-        }
-        log("rx " + frame.cmdSet.format("%02X") + "/" + frame.cmdId.format("%02X") + " len " + frame.payload.size());
-    }
-
-    // Step 2: carries the camera model id (0xFF55 = Action 6, the Nano's is unknown)
-    hidden function onConnectionReply(frame) {
-        if (frame.payload.size() < 5) {
-            log("Short connect reply");
-            return;
-        }
-        cameraDeviceId = Dji.u32(frame.payload, 0);
-        var code = frame.payload[4];
-        log("Connect reply: model " + modelHex() + " code " + code);
-        if (code != 0) {
-            fail("Camera refused request (code " + code + ")");
-        }
-    }
-
-    // Step 3 and 4
-    hidden function onCameraRequest(frame) {
-        var allowed = Dji.verifyResult(frame);
-        if (allowed == null) {
-            log("Camera request without verdict");
-            return;
-        }
-        if (cameraDeviceId == 0l && frame.payload.size() >= 4) {
-            cameraDeviceId = Dji.u32(frame.payload, 0);
-        }
-        if (!allowed) {
-            fail("Camera rejected the connection");
-            return;
-        }
-        // The camera repeats its request until confirmed: confirm repeats without flooding
-        var now = System.getTimer();
-        if (connected && now - _lastAckAt < 300) {
-            return;
-        }
-        _lastAckAt = now;
-        send(Dji.connectionResponse(frame.seq, _deviceId));
-        if (!connected) {
-            connected = true;
-            Application.Storage.setValue("paired", true);
-            state = "Connected";
-            log("Connected, model " + modelHex());
-            send(Dji.statusSubscribe(nextSeq()));
-        }
     }
 
     // ---- Writes ----
@@ -377,8 +348,12 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
         }
     }
 
-    // Watchdog for a write whose callback never arrives, plus screen refresh
+    // Keep-alive, watchdog for a write whose callback never arrives, and screen refresh
     function tick() {
+        _ticks++;
+        if (_sessionStarted && _ticks % KEEPALIVE_TICKS == 0) {
+            send(Duml.keepAlive(nextSeq()));
+        }
         if (_busy && System.getTimer() - _busySince > WRITE_ACK_TIMEOUT_MS) {
             log("No write callback, continuing");
             _busy = false;
@@ -400,15 +375,33 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
         battery = null;
         mode = null;
         _write = null;
+        _cccds = [];
         _queue = [];
         _busy = false;
+        _sessionStarted = false;
+        _assembler = new Duml.Assembler();
     }
 
     function modelHex() {
-        if (cameraDeviceId == 0l) {
-            return "?";
+        return "Nano (DUML)";
+    }
+
+    // Logs each new named device once, to see what the Edge actually hears
+    hidden function noteDevice(name, hasDjiData, hasService) {
+        if (name == null || _namesSeen.indexOf(name) >= 0 || _namesSeen.size() >= 8) {
+            return;
         }
-        return "0x" + (cameraDeviceId & 0xFFFFl).toNumber().format("%04X");
+        _namesSeen.add(name);
+        log("Saw " + name + (hasDjiData ? " +mfr" : "") + (hasService ? " +svc" : ""));
+    }
+
+    // Logs each new kind of camera message once
+    hidden function noteKey(key) {
+        if (_keysSeen.indexOf(key) >= 0) {
+            return;
+        }
+        _keysSeen.add(key);
+        log("rx " + key);
     }
 
     hidden function fail(message) {
@@ -422,5 +415,16 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
         if (logLines.size() > LOG_LINES) {
             logLines = logLines.slice(logLines.size() - LOG_LINES, null);
         }
+    }
+}
+
+module Nano {
+    function characteristicUuids() {
+        return [
+            BluetoothLowEnergy.stringToUuid("0000fff3-0000-1000-8000-00805f9b34fb"),
+            BluetoothLowEnergy.stringToUuid("0000fff4-0000-1000-8000-00805f9b34fb"),
+            BluetoothLowEnergy.stringToUuid("0000fff5-0000-1000-8000-00805f9b34fb"),
+            BluetoothLowEnergy.stringToUuid("0000fff7-0000-1000-8000-00805f9b34fb")
+        ];
     }
 }
