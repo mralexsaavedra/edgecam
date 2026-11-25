@@ -160,6 +160,9 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
         if (connected && (_lastStoragePoll == 0 || now - _lastStoragePoll >= STORAGE_POLL_MS)) {
             _lastStoragePoll = now;
             send(Duml.sdcardInfo(nextSeq()));
+            if (freeMb == null) {
+                log("Storage query sent");
+            }
         }
         if (phase == DISCONNECTED && now - _lostAt > RESCAN_AFTER_MS) {
             startScan();
@@ -320,6 +323,9 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
                     noteRecordingChange(wasRecording);
                 }
             } else if (frame.isCommand(0x02, 0x71)) {
+                if (freeMb == null) {
+                    log("Storage reply " + Duml.toHex(frame.payload));
+                }
                 var mb = Duml.freeMegabytes(frame.payload);
                 if (mb != null) {
                     freeMb = mb;

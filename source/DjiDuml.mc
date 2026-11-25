@@ -330,8 +330,10 @@ module Duml {
         return 100;
     }
 
-    // 02/80 camera status pushed twice a second: bit 7 of byte 0 is set while recording
+    // 02/80 camera status pushed twice a second. Byte 0 went 01 (idle) -> 41 (starting) -> 81 (recording)
+    // -> C1 (stopping, saving the file) -> 01 in the capture: only 81 counts as recording, otherwise the
+    // stop phase looks like a new clip.
     function isRecording(status) {
-        return status.size() > 0 && (status[0] & 0x80) != 0;
+        return status.size() > 0 && (status[0] & 0xC0) == 0x80;
     }
 }

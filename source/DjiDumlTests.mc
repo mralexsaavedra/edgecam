@@ -56,7 +56,8 @@ function dumlAssemblerReadsSplitStatusAndSkipsNoise(logger) {
 
 (:test)
 function dumlRecordingBit(logger) {
-    return Duml.isRecording([0x81, 0x02]b) && Duml.isRecording([0xC1]b) && !Duml.isRecording([0x01]b)
+    // 41 starting and C1 stopping (saving the file) are not recording: C1 used to count as a second clip
+    return Duml.isRecording([0x81, 0x02]b) && !Duml.isRecording([0xC1]b) && !Duml.isRecording([0x01]b)
         && !Duml.isRecording([0x41]b);
 }
 
