@@ -59,3 +59,22 @@ function dumlRecordingBit(logger) {
     return Duml.isRecording([0x81, 0x02]b) && Duml.isRecording([0xC1]b) && !Duml.isRecording([0x01]b)
         && !Duml.isRecording([0x41]b);
 }
+
+// On the Edge each notification is cut to 20 bytes: a status push still says whether it records
+(:test)
+function dumlReadsTruncatedStatus(logger) {
+    var idle = Dji.fromHex("5549049301027633000280010280000101C00000");
+    var rec = Dji.fromHex("5549049301027633000280810280000101C00000");
+    var a = Duml.parseNotification(idle);
+    var b = Duml.parseNotification(rec);
+    return a.size() == 1 && a[0].isCommand(0x02, 0x80) && !Duml.isRecording(a[0].payload)
+        && b.size() == 1 && Duml.isRecording(b[0].payload);
+}
+
+(:test)
+function dumlReadsWholeReplyAndRejectsBadHeader(logger) {
+    var reply = Duml.parseNotification(Dji.fromHex("550F04A207020210C0074500023093"));
+    var junk = Duml.parseNotification(Dji.fromHex("5549049401027633000280010280000101C00000"));
+    return reply.size() == 1 && reply[0].isResponse() && reply[0].isCommand(0x07, 0x45)
+        && reply[0].payload.size() == 2 && reply[0].payload[1] == 0x02 && junk.size() == 0;
+}

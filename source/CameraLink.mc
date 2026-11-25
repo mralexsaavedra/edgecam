@@ -226,7 +226,7 @@ class CameraLink extends BluetoothLowEnergy.BleDelegate {
             var hex = Dji.toHex(value);
             log("rx raw " + (hex.length() > 22 ? hex.substring(0, 22) : hex));
         }
-        var frames = _assembler.feed(value);
+        var frames = Duml.parseNotification(value);
         for (var i = 0; i < frames.size(); i++) {
             handleFrame(frames[i]);
         }

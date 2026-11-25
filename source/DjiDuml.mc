@@ -175,6 +175,39 @@ module Duml {
         }
     }
 
+    // Parses one BLE notification. Connect IQ only delivers the first 20 bytes of each notification
+    // (default MTU), so longer camera frames arrive cut short: when the header checks out (CRC8) the
+    // frame is still returned with whatever payload arrived, and CRC16 is only checked on whole frames.
+    function parseNotification(value) {
+        var frames = [];
+        var at = 0;
+        while (at + HEADER <= value.size()) {
+            if (value[at] != SOF) {
+                at++;
+                continue;
+            }
+            var frame = value.slice(at, null);
+            var length = frame[1] | ((frame[2] & 0x03) << 8);
+            if (length < MIN_SIZE || crc8(frame, 3) != frame[3]) {
+                at++;
+                continue;
+            }
+            var whole = frame.size() >= length;
+            if (whole && crc16(frame, length - 2) != (frame[length - 2] | (frame[length - 1] << 8))) {
+                at++;
+                continue;
+            }
+            var end = whole ? length - 2 : frame.size();
+            frames.add(new Frame(frame[4], frame[5], frame[6] | (frame[7] << 8), frame[8], frame[9], frame[10],
+                frame.slice(HEADER, end)));
+            if (!whole) {
+                break;
+            }
+            at += length;
+        }
+        return frames;
+    }
+
     // ---- Commands seen in the capture ----
 
     // 00/2B to broadcast: 04 00 once at start, then 01 01 every second as keep-alive
