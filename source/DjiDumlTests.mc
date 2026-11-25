@@ -5,25 +5,25 @@ import Toybox.Test;
 
 (:test)
 function dumlHelloMatchesCapture(logger) {
-    return Dji.toHex(Duml.hello(0x20CF)).equals("550F04A202F0CF2040002B0400088D");
+    return Duml.toHex(Duml.hello(0x20CF)).equals("550F04A202F0CF2040002B0400088D");
 }
 
 (:test)
 function dumlRecordStartMatchesCapture(logger) {
-    var got = Dji.toHex(Duml.record(0xF9CF, true));
+    var got = Duml.toHex(Duml.record(0xF9CF, true));
     logger.debug(got);
     return got.equals("550E04660201CFF94002020130B0");
 }
 
 (:test)
 function dumlRecordStopMatchesCapture(logger) {
-    return Dji.toHex(Duml.record(0x01D0, false)).equals("550E04660201D00140020200061B");
+    return Duml.toHex(Duml.record(0x01D0, false)).equals("550E04660201D00140020200061B");
 }
 
 (:test)
 function dumlAnswer81MatchesCapture(logger) {
     var request = new Duml.Frame(0x48, 0x02, 0x0A25, Duml.REQUEST, 0x00, 0x81, []b);
-    var got = Dji.toHex(Duml.answer81(request));
+    var got = Duml.toHex(Duml.answer81(request));
     logger.debug(got);
     return got.equals("554B04020248250AC000810041505000000000000000000000000000000000000000000000000000000000000000000000000000020000000000000000020800000000000000000000C152");
 }
@@ -31,7 +31,7 @@ function dumlAnswer81MatchesCapture(logger) {
 (:test)
 function dumlEchoMatchesCapture(logger) {
     var request = new Duml.Frame(0x88, 0x02, 0x04B2, Duml.REQUEST, 0x00, 0x74, [0x29, 0x01]b);
-    return Dji.toHex(Duml.echo(request)).equals("550F04A20288B204C000742901B143");
+    return Duml.toHex(Duml.echo(request)).equals("550F04A20288B204C000742901B143");
 }
 
 (:test)
@@ -44,9 +44,9 @@ function dumlConnectHasCapturedLayout(logger) {
 
 (:test)
 function dumlAssemblerReadsSplitStatusAndSkipsNoise(logger) {
-    var status = Dji.fromHex("5549049301027633000280010280000101C0000000C00000000000009C0D00000000000000000000000000007000000100000000000000000000000000000000000000000100007CDE");
+    var status = Duml.fromHex("5549049301027633000280010280000101C0000000C00000000000009C0D00000000000000000000000000007000000100000000000000000000000000000000000000000100007CDE");
     var a = new Duml.Assembler();
-    if (a.feed(Dji.fromHex("AA0102")).size() != 0) { return false; }
+    if (a.feed(Duml.fromHex("AA0102")).size() != 0) { return false; }
     if (a.feed(status.slice(0, 20)).size() != 0) { return false; }
     if (a.feed(status.slice(20, 40)).size() != 0) { return false; }
     var frames = a.feed(status.slice(40, null));
@@ -63,8 +63,8 @@ function dumlRecordingBit(logger) {
 // On the Edge each notification is cut to 20 bytes: a status push still says whether it records
 (:test)
 function dumlReadsTruncatedStatus(logger) {
-    var idle = Dji.fromHex("5549049301027633000280010280000101C00000");
-    var rec = Dji.fromHex("5549049301027633000280810280000101C00000");
+    var idle = Duml.fromHex("5549049301027633000280010280000101C00000");
+    var rec = Duml.fromHex("5549049301027633000280810280000101C00000");
     var a = Duml.parseNotification(idle);
     var b = Duml.parseNotification(rec);
     return a.size() == 1 && a[0].isCommand(0x02, 0x80) && !Duml.isRecording(a[0].payload)
@@ -73,8 +73,8 @@ function dumlReadsTruncatedStatus(logger) {
 
 (:test)
 function dumlReadsWholeReplyAndRejectsBadHeader(logger) {
-    var reply = Duml.parseNotification(Dji.fromHex("550F04A207020210C0074500023093"));
-    var junk = Duml.parseNotification(Dji.fromHex("5549049401027633000280010280000101C00000"));
+    var reply = Duml.parseNotification(Duml.fromHex("550F04A207020210C0074500023093"));
+    var junk = Duml.parseNotification(Duml.fromHex("5549049401027633000280010280000101C00000"));
     return reply.size() == 1 && reply[0].isResponse() && reply[0].isCommand(0x07, 0x45)
         && reply[0].payload.size() == 2 && reply[0].payload[1] == 0x02 && junk.size() == 0;
 }

@@ -7,9 +7,12 @@
 // CRC8 covers bytes 0..2 (seed 0x77), CRC16 covers everything before it (seed 0x3692),
 // both reflected (polys 0x8C and 0x8408). Version is 1 (byte 2 = 0x04 | len high bits).
 
+import Toybox.BluetoothLowEnergy;
 import Toybox.Lang;
 
 module Duml {
+    // DJI's Bluetooth company id (manufacturer data); the Edge does not expose it for the Nano
+    const COMPANY_ID = 0x08AA;
     const SOF = 0x55;
     const HEADER = 11;
     const MIN_SIZE = 13;
@@ -206,6 +209,42 @@ module Duml {
             at += length;
         }
         return frames;
+    }
+
+    // ---- Helpers ----
+
+    function uuid(short) {
+        return BluetoothLowEnergy.stringToUuid("0000" + short + "-0000-1000-8000-00805f9b34fb");
+    }
+
+    function serviceUuid() {
+        return uuid("fff0");
+    }
+
+    // Remote -> camera (write without response)
+    function writeUuid() {
+        return uuid("fff5");
+    }
+
+    // The characteristics whose notifications the iOS remote enabled, in its order
+    function notifyUuids() {
+        return [uuid("fff3"), uuid("fff4"), uuid("fff5"), uuid("fff7")];
+    }
+
+    function toHex(data) {
+        var s = "";
+        for (var i = 0; i < data.size(); i++) {
+            s += data[i].format("%02X");
+        }
+        return s;
+    }
+
+    function fromHex(text) {
+        var out = new [text.length() / 2]b;
+        for (var i = 0; i < out.size(); i++) {
+            out[i] = text.substring(2 * i, 2 * i + 2).toNumberWithBase(16);
+        }
+        return out;
     }
 
     // ---- Commands seen in the capture ----

@@ -1,3 +1,5 @@
+# Data field (the product): Lap toggles recording
 project.manifest = manifest.xml
+base.sourcePath = source;source-field
 # Prototype: keep the type checker out of the way until the protocol is proven on the device
 project.typecheck = 0

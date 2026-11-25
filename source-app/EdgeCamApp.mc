@@ -1,22 +1,34 @@
+// Diagnostic app: full-screen state and log. ENTER records/stops, or rescans when idle.
+
 import Toybox.Application;
 import Toybox.Graphics;
 import Toybox.Lang;
+import Toybox.Timer;
 import Toybox.WatchUi;
 
 class EdgeCamApp extends Application.AppBase {
     hidden var _link;
+    hidden var _timer;
 
     function initialize() {
         AppBase.initialize();
         _link = new CameraLink();
+        _timer = new Timer.Timer();
     }
 
     function onStart(state) {
         _link.start();
+        _timer.start(method(:onTick), 250, true);
     }
 
     function onStop(state) {
+        _timer.stop();
         _link.stop();
+    }
+
+    function onTick() {
+        _link.tick();
+        WatchUi.requestUpdate();
     }
 
     function getInitialView() {
@@ -46,21 +58,12 @@ class MainView extends WatchUi.View {
         y = line(dc, y, Graphics.FONT_MEDIUM, headline, color);
         y = line(dc, y, Graphics.FONT_XTINY, _link.state, Graphics.COLOR_WHITE);
         y += 4;
-
         if (_link.cameraName != null) {
             y = line(dc, y, Graphics.FONT_XTINY, _link.cameraName, Graphics.COLOR_LT_GRAY);
-        }
-        if (_link.advertHex != null) {
-            y = line(dc, y, Graphics.FONT_XTINY, "Adv " + _link.advertHex, Graphics.COLOR_LT_GRAY);
         }
         if (_link.verifyCode != null) {
             y = line(dc, y, Graphics.FONT_XTINY, "Code " + _link.verifyCode, Graphics.COLOR_LT_GRAY);
         }
-        y = line(dc, y, Graphics.FONT_XTINY, "Model " + _link.modelHex(), Graphics.COLOR_LT_GRAY);
-        if (_link.battery != null) {
-            y = line(dc, y, Graphics.FONT_XTINY, "Battery " + _link.battery + "%  mode 0x" + _link.mode.format("%02X"), Graphics.COLOR_LT_GRAY);
-        }
-
         y += 6;
         for (var i = 0; i < _link.logLines.size(); i++) {
             y = line(dc, y, Graphics.FONT_XTINY, _link.logLines[i], Graphics.COLOR_DK_GRAY);
@@ -82,7 +85,6 @@ class MainDelegate extends WatchUi.BehaviorDelegate {
         _link = link;
     }
 
-    // ENTER: record/stop when connected, scan again when idle
     function onSelect() {
         if (_link.connected) {
             _link.toggleRecord();

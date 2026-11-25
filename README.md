@@ -3,8 +3,15 @@
 Minimal Connect IQ app to check whether a **Garmin Edge 540** can control a **DJI Osmo** camera
 (target: Osmo Nano) over Bluetooth LE, using DJI's published remote protocol.
 
-Scope of this prototype: scan, connect, pair, start/stop recording, and show what the camera reports.
-No data field, no GPS push, no markers yet.
+Two builds share the camera code in `source/`:
+
+- `monkey.jungle`: the **data field** (`source-field/`). Add it to a data screen; the **Lap** button starts
+  and stops recording (Connect IQ data fields cannot read other buttons on the Edge 540). Navy: ready,
+  red: recording, amber: accept the code on the camera, grey: looking for the camera.
+- `app.jungle`: a **diagnostic app** (`source-app/`) with the state and a log on screen; ENTER toggles
+  recording. It also carries the R SDK code for the Osmo Action line (`source-rsdk/`).
+
+Not done yet: GPS push, markers, camera battery.
 
 ## How it talks to the Nano
 
@@ -34,7 +41,8 @@ The R SDK code for the Osmo Action line (`source/DjiProtocol.mc`) is kept for la
 3. Build:
 
    ```sh
-   monkeyc -d edge540 -f monkey.jungle -o bin/edgecam.prg -y /path/to/developer_key.der
+   monkeyc -d edge540 -f monkey.jungle -o bin/edgecam-field.prg -y /path/to/developer_key.der
+   monkeyc -d edge540 -f app.jungle -o bin/edgecam-app.prg -y /path/to/developer_key.der
    ```
 
 4. Unit tests (protocol frames against DJI's reference bytes), in the simulator:
