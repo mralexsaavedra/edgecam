@@ -69,6 +69,7 @@ class EdgeCamField extends WatchUi.DataField {
         _clipsField = createField("camera_clips", 2, FitContributor.DATA_TYPE_UINT16,
             { :mesgType => FitContributor.MESG_TYPE_SESSION, :units => "clip" });
         _bigFonts = [
+            WatchUi.loadResource(Rez.Fonts.BigText150),
             WatchUi.loadResource(Rez.Fonts.BigText104),
             WatchUi.loadResource(Rez.Fonts.BigText80),
             WatchUi.loadResource(Rez.Fonts.BigText60)

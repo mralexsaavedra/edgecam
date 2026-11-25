@@ -11,7 +11,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 GLYPHS = "RECSTOPBUSYAMI."  # REC, STOP, BUSY, CAM, PAIR and the dots of "REC..."
-SIZES = [104, 80, 60]
+SIZES = [150, 104, 80, 60]  # 150 for the large screens (Edge 550, 850, 1050)
 
 
 def build(ttf, out, size):

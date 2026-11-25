@@ -19,7 +19,9 @@
 2. Create a developer key once (the Monkey C extension for VS Code has *Generate a Developer Key*, or
    `openssl genrsa -out key.pem 4096 && openssl pkcs8 -topk8 -inform PEM -outform DER -in key.pem -out key.der -nocrypt`).
    Keep it: the Edge only updates an app signed with the same key.
-3. Build:
+3. Build (the data field supports edge540, edge840, edge550, edge850, edge1040 and edge1050; the debug app only
+   edge540). Use `-d <device>` per model; `monkeyc -e` exports one `.iq` package with all of them for the
+   Connect IQ Store:
 
    ```sh
    monkeyc -d edge540 -f monkey.jungle -o bin/edgecam-field.prg -y key.der   # data field
